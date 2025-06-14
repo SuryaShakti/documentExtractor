@@ -4,8 +4,19 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
-import { DocumentTable } from "@/components/table/document-table";
+// import { DocumentTable } from "@/components/table/document-table";
 import { Loader2, LogOut } from "lucide-react";
+import dynamic from "next/dynamic";
+
+const DocumentTable = dynamic(
+  () =>
+    import("@/components/table/document-table").then(
+      (mod) => mod.DocumentTable
+    ),
+  {
+    ssr: false, // This will only render on the client side
+  }
+);
 
 export default function Dashboard() {
   const { user, loading, logout } = useAuth();
