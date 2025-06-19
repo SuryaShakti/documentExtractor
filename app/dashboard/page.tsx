@@ -81,12 +81,12 @@ export default function Dashboard() {
 
       <main className="flex-1 p-4 md:p-6">
         <div className="container mx-auto">
-          <div className="mb-8">
+          {/* <div className="mb-8">
             <h1 className="text-2xl font-bold mb-2">Document Dashboard</h1>
             <p className="text-muted-foreground">
               Upload documents and extract data with AI
             </p>
-          </div>
+          </div> */}
 
           <DocumentTable />
         </div>
