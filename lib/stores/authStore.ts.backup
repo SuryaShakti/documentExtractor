@@ -1,0 +1,292 @@
+import { create } from 'zustand';
+import { devtools, persist } from 'zustand/middleware';
+import { authService, User, LoginCredentials, RegisterData } from '../api/auth';
+
+interface AuthState {
+  // State
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+  
+  // Actions
+  login: (credentials: LoginCredentials) => Promise<void>;
+  register: (data: RegisterData) => Promise<void>;
+  logout: () => Promise<void>;
+  getCurrentUser: () => Promise<void>;
+  updateProfile: (data: Partial<User>) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  clearError: () => void;
+  validateToken: () => Promise<boolean>;
+  
+  // Helper methods
+  isAdmin: () => boolean;
+  hasValidSubscription: () => boolean;
+  canCreateProject: () => boolean;
+  canUploadDocument: (fileSize?: number) => boolean;
+  getStorageUsage: () => { used: number; limit: number; percentage: number };
+}
+
+export const useAuthStore = create<AuthState>()(
+  devtools(
+    persist(
+      (set, get) => ({
+        // Initial state
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: null,
+
+        // Login action
+        login: async (credentials: LoginCredentials) => {
+          try {
+            set({ isLoading: true, error: null });
+            
+            const response = await authService.login(credentials);
+            
+            if (response.success && response.data) {
+              set({
+                user: response.data.user,
+                isAuthenticated: true,
+                isLoading: false,
+                error: null
+              });
+            } else {
+              throw new Error(response.error || 'Login failed');
+            }
+          } catch (error: any) {
+            set({
+              isLoading: false,
+              error: error.message || 'Login failed',
+              isAuthenticated: false,
+              user: null
+            });
+            throw error;
+          }
+        },
+
+        // Register action
+        register: async (data: RegisterData) => {
+          try {
+            set({ isLoading: true, error: null });
+            
+            const response = await authService.register(data);
+            
+            if (response.success && response.data) {
+              set({
+                user: response.data.user,
+                isAuthenticated: true,
+                isLoading: false,
+                error: null
+              });
+            } else {
+              throw new Error(response.error || 'Registration failed');
+            }
+          } catch (error: any) {
+            set({
+              isLoading: false,
+              error: error.message || 'Registration failed',
+              isAuthenticated: false,
+              user: null
+            });
+            throw error;
+          }
+        },
+
+        // Logout action
+        logout: async () => {
+          try {
+            await authService.logout();
+          } catch (error) {
+            console.error('Logout error:', error);
+          } finally {
+            set({
+              user: null,
+              isAuthenticated: false,
+              error: null
+            });
+          }
+        },
+
+        // Get current user
+        getCurrentUser: async () => {
+          try {
+            set({ isLoading: true, error: null });
+            
+            const response = await authService.getCurrentUser();
+            
+            if (response.success && response.data) {
+              set({
+                user: response.data,
+                isAuthenticated: true,
+                isLoading: false
+              });
+            } else {
+              throw new Error(response.error || 'Failed to get user');
+            }
+          } catch (error: any) {
+            set({
+              isLoading: false,
+              error: error.message || 'Failed to get user data',
+              isAuthenticated: false,
+              user: null
+            });
+            throw error;
+          }
+        },
+
+        // Update profile
+        updateProfile: async (data: Partial<User>) => {
+          try {
+            set({ isLoading: true, error: null });
+            
+            const response = await authService.updateProfile(data);
+            
+            if (response.success && response.data) {
+              set({
+                user: response.data,
+                isLoading: false
+              });
+            } else {
+              throw new Error(response.error || 'Profile update failed');
+            }
+          } catch (error: any) {
+            set({
+              isLoading: false,
+              error: error.message || 'Profile update failed'
+            });
+            throw error;
+          }
+        },
+
+        // Change password
+        changePassword: async (currentPassword: string, newPassword: string) => {
+          try {
+            set({ isLoading: true, error: null });
+            
+            const response = await authService.changePassword({
+              currentPassword,
+              newPassword
+            });
+            
+            if (response.success) {
+              set({ isLoading: false });
+            } else {
+              throw new Error(response.error || 'Password change failed');
+            }
+          } catch (error: any) {
+            set({
+              isLoading: false,
+              error: error.message || 'Password change failed'
+            });
+            throw error;
+          }
+        },
+
+        // Validate token
+        validateToken: async () => {
+          try {
+            if (!authService.isAuthenticated()) {
+              return false;
+            }
+
+            const response = await authService.validateToken();
+            
+            if (response.success) {
+              return true;
+            } else {
+              set({
+                user: null,
+                isAuthenticated: false
+              });
+              return false;
+            }
+          } catch (error) {
+            set({
+              user: null,
+              isAuthenticated: false
+            });
+            return false;
+          }
+        },
+
+        // Clear error
+        clearError: () => {
+          set({ error: null });
+        },
+
+        // Helper methods
+        isAdmin: () => {
+          const { user } = get();
+          return authService.isAdmin(user || undefined);
+        },
+
+        hasValidSubscription: () => {
+          const { user } = get();
+          return authService.hasValidSubscription(user || undefined);
+        },
+
+        canCreateProject: () => {
+          const { user } = get();
+          return authService.canCreateProject(user || undefined);
+        },
+
+        canUploadDocument: (fileSize = 0) => {
+          const { user } = get();
+          return authService.canUploadDocument(user || undefined, fileSize);
+        },
+
+        getStorageUsage: () => {
+          const { user } = get();
+          
+          if (!user) {
+            return { used: 0, limit: 0, percentage: 0 };
+          }
+
+          const limits = {
+            free: 100 * 1024 * 1024, // 100MB
+            basic: 1024 * 1024 * 1024, // 1GB
+            premium: 10 * 1024 * 1024 * 1024 // 10GB
+          };
+
+          const limit = limits[user.subscription.plan] || limits.free;
+          const used = user.stats.storageUsed || 0;
+          const percentage = limit > 0 ? Math.round((used / limit) * 100) : 0;
+
+          return { used, limit, percentage };
+        }
+      }),
+      {
+        name: 'auth-storage',
+        partialize: (state) => ({
+          user: state.user,
+          isAuthenticated: state.isAuthenticated
+        }),
+      }
+    ),
+    {
+      name: 'auth-store'
+    }
+  )
+);
+
+// Selectors for better performance
+export const useUser = () => useAuthStore((state) => state.user);
+export const useIsAuthenticated = () => useAuthStore((state) => state.isAuthenticated);
+export const useAuthLoading = () => useAuthStore((state) => state.isLoading);
+export const useAuthError = () => useAuthStore((state) => state.error);
+export const useIsAdmin = () => useAuthStore((state) => state.isAdmin());
+
+// Auth actions
+export const useAuthActions = () => useAuthStore((state) => ({
+  login: state.login,
+  register: state.register,
+  logout: state.logout,
+  getCurrentUser: state.getCurrentUser,
+  updateProfile: state.updateProfile,
+  changePassword: state.changePassword,
+  clearError: state.clearError,
+  validateToken: state.validateToken
+}));
+
+export default useAuthStore;

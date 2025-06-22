@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "export",
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -12,6 +11,10 @@ const nextConfig = {
     // !! WARN !!
     ignoreBuildErrors: true,
   },
+  // Remove output: "export" since we now have API routes
+  experimental: {
+    serverComponentsExternalPackages: ['mongoose']
+  }
 };
 
 module.exports = nextConfig;
