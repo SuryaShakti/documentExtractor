@@ -371,16 +371,13 @@ export function DocumentGrid({
         baseCol.cellRenderer = DataChipRenderer;
         baseCol.headerComponent = CustomHeaderRenderer;
         baseCol.editable = true;
-        baseCol.valueSetter = async (params) => {
-          try {
-            await updateExtractedData(projectId, params.data.id, colDef.id, {
-              value: params.newValue,
-            });
-            return true;
-          } catch (error) {
+        baseCol.valueSetter = (params) => {
+          updateExtractedData(projectId, params.data.id, colDef.id, {
+            value: params.newValue,
+          }).catch((error) => {
             console.error("Failed to update extracted data:", error);
-            return false;
-          }
+          });
+          return true; // Assume success for synchronous return
         };
       }
 
@@ -444,7 +441,7 @@ export function DocumentGrid({
     headerHeight: 45,
     suppressCellFocus: true,
     enableCellTextSelection: true,
-    rowSelection: "multiple",
+    rowSelection: "multiple" as const,
     animateRows: true,
     pagination: true,
     paginationPageSize: 25,
@@ -483,9 +480,7 @@ export function DocumentGrid({
         gridOptions={gridOptions}
         onGridReady={onGridReady}
         onCellValueChanged={onCellValueChanged}
-        suppressRowClickSelection={true}
         maintainColumnOrder={true}
-        enableRangeSelection={true}
         allowContextMenuWithControlKey={true}
         preventDefaultOnContextMenu={true}
       />

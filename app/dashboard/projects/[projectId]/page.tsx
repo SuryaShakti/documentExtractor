@@ -1,55 +1,75 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { 
-  Plus, 
-  Download, 
-  Filter, 
-  Search, 
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import {
+  Plus,
+  Download,
+  Filter,
+  Search,
   MoreHorizontal,
   Upload,
   Settings,
   Users,
-  BarChart3
-} from 'lucide-react';
+  BarChart3,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+} from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
-import { 
-  useActiveProject, 
+import {
+  useActiveProject,
   useProjectActions,
   useDocuments,
   useDocumentActions,
-  useDocumentLoading
-} from '@/lib/stores';
-import { DocumentGrid } from '@/components/dashboard/DocumentGrid';
-import { UploadDocumentDialog } from '@/components/dashboard/UploadDocumentDialog';
-import { AddColumnDialog } from '@/components/dashboard/AddColumnDialog';
+  useDocumentLoading,
+} from "@/lib/stores";
+import { DocumentGrid } from "@/components/dashboard/DocumentGrid";
+import { UploadDocumentDialog } from "@/components/dashboard/UploadDocumentDialog";
+import { AddColumnDialog } from "@/components/dashboard/AddColumnDialog";
 
 export default function ProjectPage() {
   const params = useParams();
   const projectId = params.projectId as string;
-  
+
   const activeProject = useActiveProject();
   const { getProject } = useProjectActions();
   const documents = useDocuments();
   const { getDocuments } = useDocumentActions();
   const isLoading = useDocumentLoading();
-  
-  const [searchTerm, setSearchTerm] = useState('');
+
+  const [searchTerm, setSearchTerm] = useState("");
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showAddColumnDialog, setShowAddColumnDialog] = useState(false);
+
+  const [isStatsVisible, setIsStatsVisible] = useState(true);
+
+  const toggleStatsVisibility = () => {
+    setIsStatsVisible((prev) => !prev);
+  };
+
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+
+  const toggleHeaderVisibility = () => {
+    setIsHeaderVisible((prev) => !prev);
+  };
 
   // Load project and documents
   useEffect(() => {
@@ -60,18 +80,20 @@ export default function ProjectPage() {
   }, [projectId, getProject, getDocuments]);
 
   const getProjectStats = () => {
-    if (!activeProject) return { total: 0, completed: 0, processing: 0, failed: 0 };
-    
+    if (!activeProject)
+      return { total: 0, completed: 0, processing: 0, failed: 0 };
+
     return {
       total: activeProject.stats.documentCount,
       completed: activeProject.stats.completedCount,
       processing: activeProject.stats.processingCount,
-      failed: documents.filter(doc => doc.status === 'failed').length
+      failed: documents.filter((doc) => doc.status === "failed").length,
     };
   };
 
   const stats = getProjectStats();
-  const completionRate = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+  const completionRate =
+    stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
 
   if (!activeProject) {
     return (
@@ -84,146 +106,206 @@ export default function ProjectPage() {
   return (
     <div className="flex-1 flex flex-col h-full">
       {/* Header */}
-      <div className="border-b border-gray-200 bg-white px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center space-x-3">
-              <h1 className="text-2xl font-bold text-gray-900 truncate">
-                {activeProject.name}
-              </h1>
-              <Badge variant="outline" className="capitalize">
-                {activeProject.status}
-              </Badge>
-            </div>
-            {activeProject.description && (
-              <p className="mt-1 text-sm text-gray-500 truncate">
-                {activeProject.description}
-              </p>
+      <div className="border-b border-gray-200 bg-white">
+        <div className="px-6 py-4 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Project Header
+          </h2>
+          <button
+            onClick={toggleHeaderVisibility}
+            className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition"
+          >
+            {isHeaderVisible ? (
+              <ChevronUp className="h-5 w-5 text-gray-600" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-gray-600" />
             )}
-            
-            {/* Quick Stats */}
-            <div className="flex items-center space-x-6 mt-3 text-sm text-gray-500">
-              <span>{stats.total} documents</span>
-              <span>{completionRate}% completed</span>
-              <span>
-                {Object.keys(activeProject.gridConfiguration.columnDefs).length - 2} extraction columns
-              </span>
-              {activeProject.stats.lastActivity && (
-                <span>
-                  Updated {new Date(activeProject.stats.lastActivity).toLocaleDateString()}
-                </span>
-              )}
-            </div>
-          </div>
+          </button>
+        </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAddColumnDialog(true)}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Column
-            </Button>
-            
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowUploadDialog(true)}
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Upload
-            </Button>
+        {/* Header Content */}
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            isHeaderVisible ? "max-h-screen opacity-100" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center space-x-3">
+                  <h1 className="text-2xl font-bold text-gray-900 truncate">
+                    {activeProject.name}
+                  </h1>
+                  <Badge variant="outline" className="capitalize">
+                    {activeProject.status}
+                  </Badge>
+                </div>
+                {activeProject.description && (
+                  <p className="mt-1 text-sm text-gray-500 truncate">
+                    {activeProject.description}
+                  </p>
+                )}
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <MoreHorizontal className="h-4 w-4" />
+                {/* Quick Stats */}
+                <div className="flex items-center space-x-6 mt-3 text-sm text-gray-500">
+                  <span>{stats.total} documents</span>
+                  <span>{completionRate}% completed</span>
+                  <span>
+                    {Object.keys(activeProject.gridConfiguration.columnDefs)
+                      .length - 2}{" "}
+                    extraction columns
+                  </span>
+                  {activeProject.stats.lastActivity && (
+                    <span>
+                      Updated{" "}
+                      {new Date(
+                        activeProject.stats.lastActivity
+                      ).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddColumnDialog(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Column
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem>
-                  <Download className="mr-2 h-4 w-4" />
-                  Export Data
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <BarChart3 className="mr-2 h-4 w-4" />
-                  Analytics
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <Users className="mr-2 h-4 w-4" />
-                  Manage Collaborators
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Project Settings
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowUploadDialog(true)}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload
+                </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem>
+                      <Download className="mr-2 h-4 w-4" />
+                      Export Data
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <BarChart3 className="mr-2 h-4 w-4" />
+                      Analytics
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem>
+                      <Users className="mr-2 h-4 w-4" />
+                      Manage Collaborators
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <Settings className="mr-2 h-4 w-4" />
+                      Project Settings
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="bg-white">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Documents</p>
-                  <p className="text-2xl font-bold">{stats.total}</p>
-                </div>
-                <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <BarChart3 className="h-4 w-4 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      <div>
+        {/* Toggle Button */}
+        <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900">Stats</h2>
+          <button
+            onClick={toggleStatsVisibility}
+            className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition"
+          >
+            {isStatsVisible ? (
+              <ChevronUp className="h-5 w-5 text-gray-600" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-gray-600" />
+            )}
+          </button>
+        </div>
 
-          <Card className="bg-white">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Completed</p>
-                  <p className="text-2xl font-bold text-green-600">{stats.completed}</p>
-                </div>
-                <div className="h-8 w-8 bg-green-100 rounded-lg flex items-center justify-center">
-                  <div className="h-4 w-4 bg-green-600 rounded-full"></div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Stats Cards Section */}
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            isStatsVisible ? "max-h-screen opacity-100" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className="bg-white">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Total Documents</p>
+                      <p className="text-2xl font-bold">{stats.total}</p>
+                    </div>
+                    <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <BarChart3 className="h-4 w-4 text-blue-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card className="bg-white">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Processing</p>
-                  <p className="text-2xl font-bold text-blue-600">{stats.processing}</p>
-                </div>
-                <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <div className="h-4 w-4 bg-blue-600 rounded-full animate-pulse"></div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              <Card className="bg-white">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Completed</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {stats.completed}
+                      </p>
+                    </div>
+                    <div className="h-8 w-8 bg-green-100 rounded-lg flex items-center justify-center">
+                      <div className="h-4 w-4 bg-green-600 rounded-full"></div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card className="bg-white">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Completion Rate</p>
-                  <p className="text-2xl font-bold">{completionRate}%</p>
-                </div>
-                <div className="h-8 w-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <div className="text-xs font-bold text-purple-600">{completionRate}%</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              <Card className="bg-white">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Processing</p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {stats.processing}
+                      </p>
+                    </div>
+                    <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <div className="h-4 w-4 bg-blue-600 rounded-full animate-pulse"></div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Completion Rate</p>
+                      <p className="text-2xl font-bold">{completionRate}%</p>
+                    </div>
+                    <div className="h-8 w-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <div className="text-xs font-bold text-purple-600">
+                        {completionRate}%
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -239,12 +321,12 @@ export default function ProjectPage() {
               className="pl-10"
             />
           </div>
-          
+
           <Button variant="outline" size="sm">
             <Filter className="h-4 w-4 mr-2" />
             Filters
           </Button>
-          
+
           <div className="text-sm text-gray-500">
             {documents.length} documents
           </div>
@@ -253,10 +335,7 @@ export default function ProjectPage() {
 
       {/* Document Grid */}
       <div className="flex-1 bg-white">
-        <DocumentGrid 
-          projectId={projectId}
-          searchTerm={searchTerm}
-        />
+        <DocumentGrid projectId={projectId} searchTerm={searchTerm} />
       </div>
 
       {/* Dialogs */}

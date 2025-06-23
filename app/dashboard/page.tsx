@@ -22,11 +22,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
-import {
-  useProjects,
-  useActiveProject,
-  useProjectActions,
-} from "@/lib/stores";
+import { useProjects, useActiveProject, useProjectActions } from "@/lib/stores";
 import { useAuth, useStorageUsage } from "@/contexts/auth-context";
 
 function DashboardContent() {
@@ -44,7 +40,7 @@ function DashboardContent() {
 
   // If user has projects and no active project is selected, redirect to first project
   useEffect(() => {
-    if (projects.length > 0 && !activeProject) {
+    if (projects.length === 1 && !activeProject) {
       const firstProject = projects[0];
       setActiveProject(firstProject);
       router.push(`/dashboard/projects/${firstProject._id}`);
@@ -158,7 +154,9 @@ function DashboardContent() {
               <div className="flex-1 bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-blue-600 h-2 rounded-full"
-                  style={{ width: `${Math.min(storageUsage.percentage, 100)}%` }}
+                  style={{
+                    width: `${Math.min(storageUsage.percentage, 100)}%`,
+                  }}
                 ></div>
               </div>
               <span className="text-xs text-muted-foreground">

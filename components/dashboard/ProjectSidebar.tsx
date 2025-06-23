@@ -1,41 +1,41 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { 
-  Plus, 
-  Search, 
-  MoreHorizontal, 
-  FileText, 
-  Calendar, 
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Plus,
+  Search,
+  MoreHorizontal,
+  FileText,
+  Calendar,
   Users,
   Archive,
   Trash2,
   Settings,
-  Filter
-} from 'lucide-react';
+  Filter,
+} from "lucide-react";
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 
-import { useProjects, useActiveProject, useProjectActions } from '@/lib/stores';
-import { CreateProjectDialog } from './CreateProjectDialog';
+import { useProjects, useActiveProject, useProjectActions } from "@/lib/stores";
+import { CreateProjectDialog } from "./CreateProjectDialog";
 
 interface ProjectSidebarProps {
   onProjectSelect?: (projectId: string) => void;
@@ -45,10 +45,12 @@ export function ProjectSidebar({ onProjectSelect }: ProjectSidebarProps) {
   const router = useRouter();
   const projects = useProjects();
   const activeProject = useActiveProject();
-  const { fetchProjects, setActiveProject, deleteProject } = useProjectActions();
-  
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('active');
+  const { getProjects, setActiveProject, deleteProject } = useProjectActions();
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "active" | "archived" | "deleted"
+  >("active");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -56,66 +58,80 @@ export function ProjectSidebar({ onProjectSelect }: ProjectSidebarProps) {
   useEffect(() => {
     const loadProjects = async () => {
       try {
-        await fetchProjects({ 
+        await getProjects({
           status: statusFilter,
-          search: searchTerm 
+          search: searchTerm,
         });
       } catch (error) {
-        console.error('Failed to load projects:', error);
+        console.error("Failed to load projects:", error);
       } finally {
         setIsLoading(false);
       }
     };
 
     loadProjects();
-  }, [fetchProjects, statusFilter, searchTerm]);
+  }, [getProjects, statusFilter, searchTerm]);
 
   // Filter projects based on search term
-  const filteredProjects = projects.filter(project =>
-    project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    project.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredProjects = projects.filter(
+    (project) =>
+      project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.description?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleProjectSelect = (project: any) => {
     setActiveProject(project);
     if (onProjectSelect) {
-      onProjectSelect(project.id);
+      onProjectSelect(project._id);
     }
-    router.push(`/dashboard?project=${project.id}`);
+    router.push(`/dashboard/projects/${project._id}`);
   };
 
-  const handleDeleteProject = async (projectId: string, e: React.MouseEvent) => {
+  const handleDeleteProject = async (
+    projectId: string,
+    e: React.MouseEvent
+  ) => {
     e.stopPropagation();
-    
-    if (confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
+
+    if (
+      confirm(
+        "Are you sure you want to delete this project? This action cannot be undone."
+      )
+    ) {
       try {
         await deleteProject(projectId);
       } catch (error) {
-        console.error('Failed to delete project:', error);
+        console.error("Failed to delete project:", error);
       }
     }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric'
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
     });
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'archived': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-blue-100 text-blue-800';
+      case "active":
+        return "bg-green-100 text-green-800";
+      case "archived":
+        return "bg-gray-100 text-gray-800";
+      default:
+        return "bg-blue-100 text-blue-800";
     }
   };
 
   const getPlanBadgeColor = (plan: string) => {
     switch (plan) {
-      case 'premium': return 'bg-purple-100 text-purple-800';
-      case 'basic': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case "premium":
+        return "bg-purple-100 text-purple-800";
+      case "basic":
+        return "bg-blue-100 text-blue-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
@@ -147,14 +163,19 @@ export function ProjectSidebar({ onProjectSelect }: ProjectSidebarProps) {
 
         {/* Filter */}
         <div className="flex items-center gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) =>
+              setStatusFilter(value as "active" | "archived" | "deleted")
+            }
+          >
             <SelectTrigger className="h-8 text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="archived">Archived</SelectItem>
-              <SelectItem value="all">All Projects</SelectItem>
+              <SelectItem value="deleted">Deleted</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm" className="h-8 w-8 p-0">
@@ -180,12 +201,11 @@ export function ProjectSidebar({ onProjectSelect }: ProjectSidebarProps) {
             <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
             <p className="text-gray-500 mb-2">No projects found</p>
             <p className="text-sm text-gray-400 mb-4">
-              {searchTerm ? 'Try adjusting your search' : 'Create your first project to get started'}
+              {searchTerm
+                ? "Try adjusting your search"
+                : "Create your first project to get started"}
             </p>
-            <Button
-              size="sm"
-              onClick={() => setShowCreateDialog(true)}
-            >
+            <Button size="sm" onClick={() => setShowCreateDialog(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Create Project
             </Button>
@@ -194,9 +214,11 @@ export function ProjectSidebar({ onProjectSelect }: ProjectSidebarProps) {
           <div className="p-2">
             {filteredProjects.map((project) => (
               <div
-                key={project.id}
+                key={project._id}
                 className={`group relative p-3 rounded-lg cursor-pointer transition-colors hover:bg-gray-50 ${
-                  activeProject?.id === project.id ? 'bg-blue-50 ring-1 ring-blue-200' : ''
+                  activeProject?._id === project._id
+                    ? "bg-blue-50 ring-1 ring-blue-200"
+                    : ""
                 }`}
                 onClick={() => handleProjectSelect(project)}
               >
@@ -210,7 +232,7 @@ export function ProjectSidebar({ onProjectSelect }: ProjectSidebarProps) {
                         {project.description}
                       </p>
                     )}
-                    
+
                     <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
                       <div className="flex items-center gap-1">
                         <FileText className="h-3 w-3" />
@@ -218,7 +240,9 @@ export function ProjectSidebar({ onProjectSelect }: ProjectSidebarProps) {
                       </div>
                       <div className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
-                        {formatDate(project.stats?.lastActivity || project.createdAt)}
+                        {formatDate(
+                          project.stats?.lastActivity || project.createdAt
+                        )}
                       </div>
                       {project.collaborators?.length > 0 && (
                         <div className="flex items-center gap-1">
@@ -268,7 +292,9 @@ export function ProjectSidebar({ onProjectSelect }: ProjectSidebarProps) {
                       <DropdownMenuItem
                         onClick={(e) => {
                           e.stopPropagation();
-                          router.push(`/dashboard/projects/${project.id}/settings`);
+                          router.push(
+                            `/dashboard/projects/${project._id}/settings`
+                          );
                         }}
                       >
                         <Settings className="mr-2 h-4 w-4" />
@@ -285,7 +311,7 @@ export function ProjectSidebar({ onProjectSelect }: ProjectSidebarProps) {
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onClick={(e) => handleDeleteProject(project.id, e)}
+                        onClick={(e) => handleDeleteProject(project._id, e)}
                         className="text-red-600"
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -296,9 +322,11 @@ export function ProjectSidebar({ onProjectSelect }: ProjectSidebarProps) {
                 </div>
 
                 {/* Project Status Badge */}
-                {project.status !== 'active' && (
+                {project.status !== "active" && (
                   <Badge
-                    className={`absolute top-2 right-2 text-xs ${getStatusColor(project.status)}`}
+                    className={`absolute top-2 right-2 text-xs ${getStatusColor(
+                      project.status
+                    )}`}
                   >
                     {project.status}
                   </Badge>
@@ -322,7 +350,7 @@ export function ProjectSidebar({ onProjectSelect }: ProjectSidebarProps) {
         onOpenChange={setShowCreateDialog}
         onProjectCreated={(project) => {
           setActiveProject(project);
-          router.push(`/dashboard?project=${project.id}`);
+          router.push(`/dashboard?project=${project._id}`);
         }}
       />
     </div>
