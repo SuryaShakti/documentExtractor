@@ -1,0 +1,398 @@
+{
+  "meta": {
+    "totalRows": 3,
+    "totalCols": 7,
+    "lastUpdated": "2025-01-15T10:00:00Z",
+    "version": "1.0"
+  },
+  "gridOptions": {
+    "domLayout": "normal",
+    "rowSelection": {
+      "enableClickSelection": false
+    },
+    "suppressCellFocus": true,
+    "enableCellTextSelection": true,
+    "rowHeight": 60,
+    "headerHeight": 45,
+    "defaultColDef": {
+      "resizable": true,
+      "sortable": true,
+      "filter": true
+    }
+  },
+  "columnDefs": {
+    "index": {
+      "field": "index",
+      "headerName": "#",
+      "width": 60,
+      "pinned": "left",
+      "sortable": false,
+      "filter": false,
+      "resizable": false,
+      "cellStyle": {
+        "display": "flex",
+        "alignItems": "center",
+        "fontSize": "14px",
+        "color": "#6b7280",
+        "borderRight": "1px solid #e5e7eb"
+      }
+    },
+    "filename": {
+      "field": "filename",
+      "headerName": "Document Bundle",
+      "width": 320,
+      "pinned": "left",
+      "cellStyle": {
+        "borderRight": "1px solid #e5e7eb"
+      },
+      "cellRenderer": "documentBundleRenderer"
+    },
+    "col_1": {
+      "field": "col_1",
+      "headerName": "Line Of Business",
+      "width": 150,
+      "resizable": true,
+      "sortable": true,
+      "filter": true,
+      "cellRenderer": "dataChipRenderer",
+      "cellStyle": {
+        "borderRight": "1px solid #e5e7eb"
+      },
+      "headerComponent": "customHeaderRenderer",
+      "customProperties": {
+        "id": "col_1",
+        "name": "Line Of Business",
+        "prompt": "Extract the line of business or business type from this document",
+        "aiModel": "gpt-4",
+        "type": "collection",
+        "color": "#f97316",
+        "extraction": {
+          "enabled": true,
+          "status": "active"
+        },
+        "styling": {
+          "backgroundColor": "#f97316",
+          "textColor": "#ffffff",
+          "fontFamily": "Inter",
+          "fontSize": 12,
+          "fontWeight": "medium",
+          "alignment": "left"
+        }
+      }
+    },
+    "col_2": {
+      "field": "col_2",
+      "headerName": "Document Summary",
+      "width": 200,
+      "resizable": true,
+      "sortable": true,
+      "filter": true,
+      "cellRenderer": "dataChipRenderer",
+      "cellStyle": {
+        "borderRight": "1px solid #e5e7eb"
+      },
+      "headerComponent": "customHeaderRenderer",
+      "customProperties": {
+        "id": "col_2",
+        "name": "Document Summary",
+        "prompt": "Provide a brief summary of this document",
+        "aiModel": "gpt-4",
+        "type": "text",
+        "color": "#3b82f6",
+        "extraction": {
+          "enabled": true,
+          "status": "active"
+        },
+        "styling": {
+          "backgroundColor": "#3b82f6",
+          "textColor": "#ffffff",
+          "fontFamily": "Inter",
+          "fontSize": 12,
+          "fontWeight": "medium",
+          "alignment": "left"
+        }
+      }
+    },
+    "col_3": {
+      "field": "col_3",
+      "headerName": "Customer",
+      "width": 180,
+      "resizable": true,
+      "sortable": true,
+      "filter": true,
+      "cellRenderer": "dataChipRenderer",
+      "cellStyle": {
+        "borderRight": "1px solid #e5e7eb"
+      },
+      "headerComponent": "customHeaderRenderer",
+      "customProperties": {
+        "id": "col_3",
+        "name": "Customer",
+        "prompt": "Extract the customer or client name from this document",
+        "aiModel": "gpt-4",
+        "type": "text",
+        "color": "#8b5cf6",
+        "extraction": {
+          "enabled": true,
+          "status": "active"
+        },
+        "styling": {
+          "backgroundColor": "#8b5cf6",
+          "textColor": "#ffffff",
+          "fontFamily": "Inter",
+          "fontSize": 12,
+          "fontWeight": "medium",
+          "alignment": "left"
+        }
+      }
+    },
+    "col_4": {
+      "field": "col_4",
+      "headerName": "New Logo",
+      "width": 120,
+      "resizable": true,
+      "sortable": true,
+      "filter": true,
+      "cellRenderer": "dataChipRenderer",
+      "cellStyle": {
+        "borderRight": "1px solid #e5e7eb"
+      },
+      "headerComponent": "customHeaderRenderer",
+      "customProperties": {
+        "id": "col_4",
+        "name": "New Logo",
+        "prompt": "Determine if this document mentions a new logo or branding",
+        "aiModel": "gpt-4",
+        "type": "status",
+        "color": "#22c55e",
+        "extraction": {
+          "enabled": true,
+          "status": "active"
+        },
+        "styling": {
+          "backgroundColor": "#22c55e",
+          "textColor": "#ffffff",
+          "fontFamily": "Inter",
+          "fontSize": 12,
+          "fontWeight": "medium",
+          "alignment": "left"
+        }
+      }
+    },
+    "col_5": {
+      "field": "col_5",
+      "headerName": "Agreement, Order & Contract",
+      "width": 250,
+      "resizable": true,
+      "sortable": true,
+      "filter": true,
+      "cellRenderer": "dataChipRenderer",
+      "cellStyle": {
+        "borderRight": "1px solid #e5e7eb"
+      },
+      "headerComponent": "customHeaderRenderer",
+      "customProperties": {
+        "id": "col_5",
+        "name": "Agreement, Order & Contract",
+        "prompt": "Extract agreement date, order details, and contract information",
+        "aiModel": "gpt-4",
+        "type": "text",
+        "color": "#06b6d4",
+        "extraction": {
+          "enabled": true,
+          "status": "active"
+        },
+        "styling": {
+          "backgroundColor": "#06b6d4",
+          "textColor": "#ffffff",
+          "fontFamily": "Inter",
+          "fontSize": 12,
+          "fontWeight": "medium",
+          "alignment": "left"
+        }
+      }
+    },
+    "col_6": {
+      "field": "col_6",
+      "headerName": "Payment Terms",
+      "width": 180,
+      "resizable": true,
+      "sortable": true,
+      "filter": true,
+      "cellRenderer": "dataChipRenderer",
+      "cellStyle": {
+        "borderRight": "1px solid #e5e7eb"
+      },
+      "headerComponent": "customHeaderRenderer",
+      "customProperties": {
+        "id": "col_6",
+        "name": "Payment Terms",
+        "prompt": "Extract payment terms and conditions from this document",
+        "aiModel": "gpt-4",
+        "type": "text",
+        "color": "#f59e0b",
+        "extraction": {
+          "enabled": true,
+          "status": "active"
+        },
+        "styling": {
+          "backgroundColor": "#f59e0b",
+          "textColor": "#ffffff",
+          "fontFamily": "Inter",
+          "fontSize": 12,
+          "fontWeight": "medium",
+          "alignment": "left"
+        }
+      }
+    }
+  },
+  "rowData": [
+    {
+      "id": "doc-1",
+      "filename": "Enterprise Agreement.pdf",
+      "uploadDate": "2025-01-15",
+      "fileType": "application/pdf",
+      "fileUrl": "#",
+      "col_1": {
+        "value": "Enterprise",
+        "type": "collection",
+        "status": null,
+        "confidence": 0.95,
+        "extractedAt": "2025-01-15T10:00:00Z"
+      },
+      "col_2": {
+        "value": "Enterprise agreement covering service terms and conditions for business operations",
+        "type": "text",
+        "status": null,
+        "confidence": 0.92,
+        "extractedAt": "2025-01-15T10:00:00Z"
+      },
+      "col_3": {
+        "value": "Insight Global",
+        "type": "text",
+        "status": null,
+        "confidence": 0.98,
+        "extractedAt": "2025-01-15T10:00:00Z"
+      },
+      "col_4": {
+        "value": "Yes",
+        "type": "status",
+        "status": "yes",
+        "confidence": 0.87,
+        "extractedAt": "2025-01-15T10:00:00Z"
+      },
+      "col_5": {
+        "value": "Agreement Date: 2025-01-15, Enterprise Service Contract",
+        "type": "text",
+        "status": null,
+        "confidence": 0.89,
+        "extractedAt": "2025-01-15T10:00:00Z"
+      },
+      "col_6": {
+        "value": "Net 30 days",
+        "type": "text",
+        "status": null,
+        "confidence": 0.96,
+        "extractedAt": "2025-01-15T10:00:00Z"
+      }
+    },
+    {
+      "id": "doc-2",
+      "filename": "Carrier Contract.docx",
+      "uploadDate": "2025-01-14",
+      "fileType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "fileUrl": "#",
+      "col_1": {
+        "value": "Carrier",
+        "type": "collection",
+        "status": null,
+        "confidence": 0.94,
+        "extractedAt": "2025-01-14T10:00:00Z"
+      },
+      "col_2": {
+        "value": "Carrier service agreement with emergency provisions and logistics terms",
+        "type": "text",
+        "status": null,
+        "confidence": 0.91,
+        "extractedAt": "2025-01-14T10:00:00Z"
+      },
+      "col_3": {
+        "value": "Emergency Twenty Logistics",
+        "type": "text",
+        "status": null,
+        "confidence": 0.97,
+        "extractedAt": "2025-01-14T10:00:00Z"
+      },
+      "col_4": {
+        "value": "No",
+        "type": "status",
+        "status": "no",
+        "confidence": 0.93,
+        "extractedAt": "2025-01-14T10:00:00Z"
+      },
+      "col_5": {
+        "value": "Agreement Date: 2025-01-14, Carrier Service Contract",
+        "type": "text",
+        "status": null,
+        "confidence": 0.88,
+        "extractedAt": "2025-01-14T10:00:00Z"
+      },
+      "col_6": {
+        "value": "Net 15 days",
+        "type": "text",
+        "status": null,
+        "confidence": 0.95,
+        "extractedAt": "2025-01-14T10:00:00Z"
+      }
+    },
+    {
+      "id": "doc-3",
+      "filename": "Safety Shield Terms.pdf",
+      "uploadDate": "2025-01-13",
+      "fileType": "application/pdf",
+      "fileUrl": "#",
+      "col_1": {
+        "value": "Safety Shield",
+        "type": "collection",
+        "status": null,
+        "confidence": 0.96,
+        "extractedAt": "2025-01-13T10:00:00Z"
+      },
+      "col_2": {
+        "value": "General Terms for safety and compliance requirements in workplace",
+        "type": "text",
+        "status": null,
+        "confidence": 0.90,
+        "extractedAt": "2025-01-13T10:00:00Z"
+      },
+      "col_3": {
+        "value": "Winchester Public Safety",
+        "type": "text",
+        "status": null,
+        "confidence": 0.97,
+        "extractedAt": "2025-01-13T10:00:00Z"
+      },
+      "col_4": {
+        "value": "No",
+        "type": "status",
+        "status": "no",
+        "confidence": 0.91,
+        "extractedAt": "2025-01-13T10:00:00Z"
+      },
+      "col_5": {
+        "value": "Agreement Date: 2025-01-13, Safety Compliance Contract",
+        "type": "text",
+        "status": null,
+        "confidence": 0.86,
+        "extractedAt": "2025-01-13T10:00:00Z"
+      },
+      "col_6": {
+        "value": "Net 45 days",
+        "type": "text",
+        "status": null,
+        "confidence": 0.94,
+        "extractedAt": "2025-01-13T10:00:00Z"
+      }
+    }
+  ]
+}
