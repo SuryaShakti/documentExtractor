@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -28,6 +28,7 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth(); // Get user from auth context
 
   const {
     register,
@@ -48,14 +49,22 @@ export function LoginForm() {
       const from = searchParams.get("from");
       const redirectUrl = from ? decodeURIComponent(from) : "/dashboard";
 
-      // Redirect after successful login
-      router.push(redirectUrl);
+      console.log("User after login:", user);
     } catch (error: any) {
       setError(error.message || "Login failed");
     } finally {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (user && user?.role === "admin") {
+      router.push("/admin");
+    } else if (user && user?.role === "user") {
+      // Redirect after successful login
+      router.push("/dashboard");
+    }
+  }, [user, router]);
 
   return (
     <div className="space-y-6">
@@ -148,7 +157,7 @@ export function LoginForm() {
             <strong>Admin:</strong> suryashakti1999@gmail.com / Admin@1234
           </p>
           <p>
-            <strong>User:</strong> user@example.com / password123
+            <strong>User:</strong> suryashakti@gmail.com / surya@123
           </p>
         </div>
       </div>

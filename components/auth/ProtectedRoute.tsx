@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import { useAuth } from '@/contexts/auth-context';
+import { useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { useAuth } from "@/contexts/auth-context";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -10,10 +10,10 @@ interface ProtectedRouteProps {
   redirectTo?: string;
 }
 
-export function ProtectedRoute({ 
-  children, 
-  requireAdmin = false, 
-  redirectTo = '/login' 
+export function ProtectedRoute({
+  children,
+  requireAdmin = false,
+  redirectTo = "/login",
 }: ProtectedRouteProps) {
   const { user, loading, token } = useAuth();
   const router = useRouter();
@@ -32,8 +32,9 @@ export function ProtectedRoute({
     }
 
     // Check admin requirement
-    if (requireAdmin && user.role !== 'admin') {
-      router.push('/dashboard'); // Redirect non-admin users to dashboard
+    if (requireAdmin && user.role !== "admin") {
+      alert("You do not have permission to access this page " + user.role);
+      router.push("/dashboard"); // Redirect non-admin users to dashboard
       return;
     }
   }, [user, loading, token, router, pathname, requireAdmin, redirectTo]);
@@ -53,7 +54,7 @@ export function ProtectedRoute({
   }
 
   // Don't render if admin required but user is not admin
-  if (requireAdmin && user.role !== 'admin') {
+  if (requireAdmin && user.role !== "admin") {
     return null;
   }
 
