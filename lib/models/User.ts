@@ -127,7 +127,7 @@ const userSchema = new mongoose.Schema({
 });
 
 // Indexes for better performance
-userSchema.index({ email: 1 });
+// Note: email index is already created by unique: true in schema
 userSchema.index({ role: 1 });
 userSchema.index({ status: 1 });
 userSchema.index({ 'subscription.plan': 1 });

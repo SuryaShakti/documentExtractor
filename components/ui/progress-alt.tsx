@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-// Custom Progress component to bypass Radix UI issue
+// Simple Progress component that bypasses Radix UI issues
 const Progress = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & {
@@ -28,8 +28,11 @@ const Progress = React.forwardRef<
       {...props}
     >
       <div
-        className="h-full bg-primary transition-all duration-300 ease-in-out"
-        style={{ width: `${percentage}%` }}
+        className="h-full w-full flex-1 bg-primary transition-all"
+        style={{ 
+          transform: `translateX(-${100 - percentage}%)`,
+          width: '100%'
+        }}
       />
     </div>
   );

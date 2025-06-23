@@ -285,7 +285,10 @@ export function UploadDocumentDialog({
                   <span className="truncate">{progress.file.name}</span>
                   <span>{Math.round(progress.percentage)}%</span>
                 </div>
-                <Progress value={progress.percentage} className="h-2" />
+                <Progress 
+                  value={typeof progress.percentage === 'number' ? Math.max(0, Math.min(100, progress.percentage)) : 0} 
+                  className="h-2" 
+                />
               </div>
             ))}
           </div>
