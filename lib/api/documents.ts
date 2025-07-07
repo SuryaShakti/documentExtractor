@@ -218,6 +218,19 @@ class DocumentService {
     return apiClient.post(`/projects/${projectId}/documents/${documentId}/process`);
   }
 
+  async extractDataWithAI(projectId: string, documentId: string): Promise<ApiResponse<{
+    extractionResults: any[];
+    successCount: number;
+    totalColumns: number;
+    document: {
+      id: string;
+      status: string;
+      extractedData: Record<string, ExtractedData>;
+    };
+  }>> {
+    return apiClient.post('/extract', { projectId, documentId });
+  }
+
   // Helper methods
   formatFileSize(bytes: number): string {
     if (bytes === 0) return '0 Bytes';

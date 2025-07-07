@@ -213,10 +213,26 @@ async function uploadDocumentsHandler(req: AuthenticatedRequest) {
         req.user!._id.toString()
       );
 
+      // Determine the correct resource type based on file type
+      const getResourceType = (mimeType: string) => {
+        if (mimeType === 'application/pdf') {
+          return 'raw'; // PDFs should be uploaded as raw files
+        }
+        if (mimeType.startsWith('image/')) {
+          return 'image';
+        }
+        if (mimeType.startsWith('video/')) {
+          return 'video';
+        }
+        return 'raw'; // Default to raw for documents
+      };
+
       const uploadResult = await cloudinary.uploader.upload(dataURI, {
-        folder: "document-extractor",
-        public_id: uniqueFilename.replace(/\.[^/.]+$/, ""), // Remove extension as Cloudinary adds it
-        resource_type: "auto",
+        folder: "documents", // Use consistent folder name
+        public_id: uniqueFilename.replace(/\.[^/.]+$/, ""),
+        resource_type: getResourceType(file.mimetype || ""),
+        // Don't let Cloudinary auto-detect format for PDFs
+        format: file.mimetype === 'application/pdf' ? 'pdf' : undefined,
       });
 
       // Create document record

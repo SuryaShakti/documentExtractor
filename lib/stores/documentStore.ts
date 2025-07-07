@@ -27,6 +27,7 @@ interface DocumentState {
   updateExtractedData: (projectId: string, documentId: string, columnId: string, data: UpdateExtractedDataParams) => Promise<void>;
   downloadDocument: (projectId: string, documentId: string, redirect?: boolean) => Promise<void>;
   processDocument: (projectId: string, documentId: string) => Promise<void>;
+  extractDataWithAI: (projectId: string, documentId: string) => Promise<void>;
   
   // Utilities
   clearError: () => void;
@@ -257,6 +258,30 @@ export const useDocumentStore = create<DocumentState>()(
         }
       },
 
+      // Extract data with AI
+      extractDataWithAI: async (projectId: string, documentId: string) => {
+        try {
+          set({ error: null });
+          
+          const response = await documentService.extractDataWithAI(projectId, documentId);
+          
+          if (response.success) {
+            // Refresh documents to get updated extracted data
+            await get().getDocuments(projectId);
+            
+            // Update current document if needed
+            if (get().currentDocument?._id === documentId) {
+              await get().getDocument(projectId, documentId);
+            }
+          } else {
+            throw new Error(response.error || 'Failed to extract data with AI');
+          }
+        } catch (error: any) {
+          set({ error: error.message || 'Failed to extract data with AI' });
+          throw error;
+        }
+      },
+
       // Clear error
       clearError: () => {
         set({ error: null });
@@ -296,6 +321,7 @@ export const useDocumentActions = () => useDocumentStore((state) => ({
   updateExtractedData: state.updateExtractedData,
   downloadDocument: state.downloadDocument,
   processDocument: state.processDocument,
+  extractDataWithAI: state.extractDataWithAI,
   clearError: state.clearError,
   setCurrentDocument: state.setCurrentDocument,
   clearUploadProgress: state.clearUploadProgress
