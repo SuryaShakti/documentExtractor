@@ -24,6 +24,7 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
+  Brain,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ import {
   useActiveProject,
   useProjectActions,
 } from "@/lib/stores";
+import { useToast } from "@/hooks/use-toast";
 
 interface DocumentGridProps {
   projectId: string;
@@ -170,15 +172,62 @@ const DataChipRenderer = ({ value, colDef }: any) => {
   );
 };
 
-const ActionCellRenderer = ({ data, api }: any) => {
-  const { downloadDocument, processDocument, deleteDocument } =
+const ActionCellRenderer = (params: any) => {
+  const { data, api, context } = params;
+  const { downloadDocument, processDocument, deleteDocument, extractDataWithAI } =
     useDocumentActions();
+  const { toast } = useToast();
+  const activeProject = context?.activeProject;
+
+  // Check if there are extractable columns
+  const hasExtractableColumns = () => {
+    if (!activeProject?.gridConfiguration?.columnDefs) return false;
+    
+    const columnDefs = activeProject.gridConfiguration.columnDefs;
+    
+    // Check if columnDefs is a Map and iterate properly
+    if (columnDefs instanceof Map) {
+      for (const [columnId, columnDef] of columnDefs.entries()) {
+        // Skip system columns (index, filename)
+        if (columnId === 'index' || columnId === 'filename') {
+          continue;
+        }
+        
+        if (columnDef.customProperties && 
+            columnDef.customProperties.extraction?.enabled &&
+            columnDef.customProperties.extraction?.status === 'active') {
+          return true;
+        }
+      }
+    } else if (typeof columnDefs === 'object' && columnDefs !== null) {
+      // Handle case where columnDefs might be a plain object
+      for (const [columnId, columnDef] of Object.entries(columnDefs)) {
+        // Skip system columns (index, filename)
+        if (columnId === 'index' || columnId === 'filename') {
+          continue;
+        }
+        
+        if (columnDef.customProperties && 
+            columnDef.customProperties.extraction?.enabled &&
+            columnDef.customProperties.extraction?.status === 'active') {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  };
 
   const handleDownload = async () => {
     try {
       await downloadDocument(data.projectId, data.id, true);
     } catch (error) {
       console.error("Download failed:", error);
+      toast({
+        title: "Download Failed",
+        description: "Failed to download the document. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -186,8 +235,50 @@ const ActionCellRenderer = ({ data, api }: any) => {
     try {
       await processDocument(data.projectId, data.id);
       api.refreshCells();
+      toast({
+        title: "Processing Started",
+        description: "Document processing has been initiated.",
+      });
     } catch (error) {
       console.error("Processing failed:", error);
+      toast({
+        title: "Processing Failed",
+        description: "Failed to start document processing. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleExtractData = async () => {
+    if (!hasExtractableColumns()) {
+      toast({
+        title: "No Columns to Extract",
+        description: "Please add columns with extraction rules before extracting data.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      toast({
+        title: "Extraction Started",
+        description: "AI data extraction has been initiated. Please wait...",
+      });
+      
+      await extractDataWithAI(data.projectId, data.id);
+      api.refreshCells();
+      
+      toast({
+        title: "Extraction Completed",
+        description: "Data has been successfully extracted from the document.",
+      });
+    } catch (error: any) {
+      console.error("Extraction failed:", error);
+      toast({
+        title: "Extraction Failed",
+        description: error.message || "Failed to extract data. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -196,8 +287,17 @@ const ActionCellRenderer = ({ data, api }: any) => {
       try {
         await deleteDocument(data.projectId, data.id);
         api.refreshCells();
+        toast({
+          title: "Document Deleted",
+          description: "The document has been successfully deleted.",
+        });
       } catch (error) {
         console.error("Delete failed:", error);
+        toast({
+          title: "Delete Failed",
+          description: "Failed to delete the document. Please try again.",
+          variant: "destructive",
+        });
       }
     }
   };
@@ -217,6 +317,23 @@ const ActionCellRenderer = ({ data, api }: any) => {
             </Button>
           </TooltipTrigger>
           <TooltipContent>Download document</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={handleExtractData}
+              disabled={data.status === "processing"}
+            >
+              <Brain className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Extract data with AI</TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
@@ -388,12 +505,15 @@ export function DocumentGrid({
     colDefs.push({
       field: "actions",
       headerName: "Actions",
-      width: 120,
+      width: 160,
       resizable: false,
       sortable: false,
       filter: false,
       pinned: "right",
       cellRenderer: ActionCellRenderer,
+      cellRendererParams: {
+        context: { activeProject }
+      },
       cellStyle: {
         display: "flex",
         alignItems: "center",
