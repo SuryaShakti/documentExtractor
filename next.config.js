@@ -3,16 +3,10 @@ const nextConfig = {
   // Ignore ESLint errors during build
   eslint: {
     ignoreDuringBuilds: true,
-    // Optional: Specify directories to ignore
-    // dirs: ['pages', 'utils']
   },
   
   // Ignore TypeScript errors during build
   typescript: {
-    // !! WARN !!
-    // Dangerously allow production builds to successfully complete even if
-    // your project has type errors.
-    // !! WARN !!
     ignoreBuildErrors: true,
   },
   
@@ -21,21 +15,12 @@ const nextConfig = {
     unoptimized: true 
   },
   
-  // Suppress warnings during build (optional)
-  onDemandEntries: {
-    // Period (in ms) where the server will keep pages in the buffer
-    maxInactiveAge: 25 * 1000,
-    // Number of pages that should be kept simultaneously without being disposed
-    pagesBufferLength: 2,
-  },
-  
   // Experimental features
   experimental: {
     serverComponentsExternalPackages: ['mongoose'],
-    // Removed missingSuspenseWithCSRBailout as it's not supported in this Next.js version
   },
   
-  // Webpack configuration to suppress warnings (optional)
+  // Webpack configuration for PDF.js and canvas issues
   webpack: (config, { dev, isServer }) => {
     // Suppress specific warnings
     if (!dev) {
@@ -43,6 +28,28 @@ const nextConfig = {
         warnings: false,
       };
     }
+    
+    // Fix for PDF.js canvas issues in server-side rendering
+    if (isServer) {
+      // Ignore canvas for server-side builds
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        canvas: false,
+      };
+      
+      // Externalize PDF.js dependencies that cause issues
+      config.externals = config.externals || [];
+      config.externals.push({
+        canvas: 'canvas',
+      });
+    }
+    
+    // Additional PDF.js webpack configuration
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      // Prevent canvas from being bundled
+      canvas: false,
+    };
     
     return config;
   },

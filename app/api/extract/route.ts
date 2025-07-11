@@ -1,3 +1,7 @@
+// app/api/extract/route.ts
+// CLEAN UNIFIED EXTRACTION - No complex imports, TypeScript compliant
+// Handles both images (Vision API) and PDFs (text extraction)
+
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/database/mongodb";
 import Document from "@/lib/models/Document";
@@ -8,7 +12,7 @@ import jwt from "jsonwebtoken";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  timeout: 60000, // 60 second timeout
+  timeout: 60000,
 });
 
 interface ExtractionColumn {
@@ -30,24 +34,21 @@ interface ExtractionResult {
   };
 }
 
-// Optimized document extraction using OpenAI Vision API
-async function extractDataFromDocument(
+// IMAGE PROCESSING - Using OpenAI Vision API (your existing working method)
+async function extractFromImage(
   documentUrl: string,
   columns: ExtractionColumn[]
 ): Promise<ExtractionResult[]> {
-  console.log("🚀 Starting optimized document extraction");
-  console.log("📄 Document URL:", documentUrl);
-  console.log("📋 Columns to extract:", columns.length);
-
+  console.log("🖼️ Processing IMAGE with Vision API...");
+  
   try {
-    // Create a comprehensive extraction prompt for all columns at once
-    const extractionPrompt = `Analyze this document and extract the following information. Return ONLY valid JSON with no additional text.
+    const extractionPrompt = `Analyze this image document and extract the following information. Return ONLY valid JSON with no additional text.
 
 EXTRACTION TASKS:
 ${columns.map((col, index) => `${index + 1}. ${col.name}: ${col.prompt} (Type: ${col.type})`).join('\n')}
 
 INSTRUCTIONS:
-- Examine the document carefully for each piece of information
+- Examine the image carefully for each piece of information
 - If information is clearly visible, provide it with high confidence (0.8-0.95)
 - If information is partially visible or unclear, provide it with medium confidence (0.3-0.7)
 - If information is not found or not visible, return empty string with confidence 0
@@ -63,10 +64,10 @@ REQUIRED JSON FORMAT:
   ]
 }`;
 
-    console.log("📤 Sending request to OpenAI Vision API...");
+    console.log("📤 Sending image to OpenAI Vision API...");
     
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o", // Use the latest vision model
+      model: "gpt-4o",
       messages: [
         {
           role: "user",
@@ -79,33 +80,30 @@ REQUIRED JSON FORMAT:
               type: "image_url",
               image_url: {
                 url: documentUrl,
-                detail: "high" // High detail for better extraction
+                detail: "high"
               }
             }
           ]
         }
       ],
       max_tokens: 2000,
-      temperature: 0.1, // Low temperature for consistency
+      temperature: 0.1,
       response_format: { type: "json_object" },
     });
 
     const response = completion.choices[0].message.content;
-    console.log("📥 OpenAI response received");
-    console.log("📊 Response preview:", response?.substring(0, 200) + "...");
+    console.log("📥 Vision API response received");
 
     if (!response) {
-      throw new Error("No response from OpenAI");
+      throw new Error("No response from OpenAI Vision API");
     }
 
-    // Parse the response
     const parsedResponse = JSON.parse(response);
     
     if (!parsedResponse.extractions || !Array.isArray(parsedResponse.extractions)) {
-      throw new Error("Invalid response format from OpenAI");
+      throw new Error("Invalid response format from Vision API");
     }
 
-    // Convert to our result format
     const results: ExtractionResult[] = parsedResponse.extractions.map((extraction: any) => ({
       columnId: extraction.columnId,
       value: extraction.value || "",
@@ -113,23 +111,16 @@ REQUIRED JSON FORMAT:
       extractedBy: {
         method: "ai",
         model: "gpt-4o",
-        version: "vision-optimized-v1"
+        version: "vision-api-v1"
       }
     }));
 
-    console.log("✅ Extraction completed successfully");
-    console.log("📊 Results:", results.map(r => ({ 
-      column: r.columnId, 
-      hasValue: !!r.value, 
-      confidence: r.confidence 
-    })));
-
+    console.log("✅ Image extraction completed successfully");
     return results;
 
   } catch (error: any) {
-    console.error("❌ Extraction failed:", error.message);
+    console.error("❌ Image extraction failed:", error.message);
     
-    // Return fallback results for all columns
     return columns.map(column => ({
       columnId: column.id,
       value: "",
@@ -137,131 +128,238 @@ REQUIRED JSON FORMAT:
       extractedBy: {
         method: "ai",
         model: "gpt-4o",
-        version: "vision-optimized-v1-failed"
+        version: "vision-api-v1-failed"
       }
     }));
   }
 }
 
-// Fallback text-based extraction for when Vision API fails
-async function extractFromTextFallback(
+// PDF PROCESSING - Clean text extraction + OpenAI processing
+async function extractFromPDF(
   documentUrl: string,
   columns: ExtractionColumn[]
 ): Promise<ExtractionResult[]> {
-  console.log("🔄 Attempting text fallback extraction...");
+  console.log("📄 Processing PDF with clean text extraction...");
   
   try {
-    // Try to get text content first
-    const textCompletion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Extract ALL readable text from this document. Return the complete text content, maintaining structure and formatting."
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: documentUrl,
-                detail: "high"
-              }
-            }
-          ]
-        }
-      ],
-      max_tokens: 4000,
-      temperature: 0.1
-    });
-
-    const extractedText = textCompletion.choices[0].message.content || "";
+    // Step 1: Download PDF
+    const pdfBuffer = await downloadPDFBuffer(documentUrl);
     
-    if (!extractedText || extractedText.length < 10) {
-      throw new Error("No readable text found in document");
+    // Step 2: Extract text using pdf-parse only
+    const extractedText = await extractTextWithPDFParse(pdfBuffer);
+    
+    // Step 3: Process extracted text with OpenAI
+    return await extractDataFromText(extractedText, columns);
+    
+  } catch (error: any) {
+    console.error("❌ PDF extraction failed:", error.message);
+    
+    return columns.map(column => ({
+      columnId: column.id,
+      value: `PDF extraction failed: ${error.message}`,
+      confidence: 0,
+      extractedBy: {
+        method: "ai",
+        model: "gpt-4o",
+        version: "pdf-extraction-failed"
+      }
+    }));
+  }
+}
+
+// Helper: Download PDF buffer with proper error handling
+async function downloadPDFBuffer(url: string): Promise<Buffer> {
+  console.log(`📥 Downloading PDF from: ${url}`);
+  
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'DocumentExtractor/1.0',
+        'Accept': 'application/pdf,*/*'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
+    
+    const contentType = response.headers.get('content-type') || '';
+    console.log(`📄 Content-Type: ${contentType}`);
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    console.log(`✅ PDF downloaded: ${buffer.length} bytes`);
+    
+    // Verify it's a PDF by checking the header
+    const header = buffer.toString('ascii', 0, 5);
+    if (!header.startsWith('%PDF')) {
+      throw new Error(`Invalid PDF file: header is '${header}', expected '%PDF'`);
+    }
+    
+    console.log(`✅ PDF header verified: ${header}`);
+    return buffer;
+    
+  } catch (error: any) {
+    console.error('❌ PDF download failed:', error.message);
+    throw new Error(`Failed to download PDF: ${error.message}`);
+  }
+}
 
-    console.log("📝 Text extracted successfully, length:", extractedText.length);
+// Helper: Clean pdf-parse text extraction
+async function extractTextWithPDFParse(pdfBuffer: Buffer): Promise<string> {
+  console.log(`📚 Processing PDF buffer: ${pdfBuffer.length} bytes with pdf-parse...`);
+  
+  try {
+    // Simple dynamic import for pdf-parse
+    const { default: pdfParse } = await import('pdf-parse');
+    
+    const data = await pdfParse(pdfBuffer, {
+      // normalizeWhitespace: false,
+      // disableCombineTextItems: false
+    });
+    
+    console.log(`📊 PDF parse results: ${data.numpages} pages, ${data.text.length} characters`);
+    
+    if (!data.text || data.text.length < 50) {
+      throw new Error(`PDF contains insufficient text: ${data.text.length} characters`);
+    }
+    
+    console.log(`✅ pdf-parse SUCCESS! Text: ${data.text.length} characters`);
+    console.log(`📄 Text preview: ${data.text.substring(0, 300)}...`);
+    
+    return data.text;
+    
+  } catch (error: any) {
+    console.error('❌ pdf-parse failed:', error.message);
+    throw new Error(`pdf-parse extraction failed: ${error.message}`);
+  }
+}
 
-    // Now extract fields from the text
-    const extractionPrompt = `Based on the following document text, extract the requested information:
+// Helper: Extract data from text using OpenAI
+async function extractDataFromText(
+  text: string,
+  columns: ExtractionColumn[]
+): Promise<ExtractionResult[]> {
+  console.log("🤖 Processing extracted text with OpenAI...");
+  
+  try {
+    const extractionPrompt = `Analyze this document text and extract the following information. Return ONLY valid JSON.
 
 DOCUMENT TEXT:
-${extractedText.substring(0, 8000)} ${extractedText.length > 8000 ? '...(truncated)' : ''}
+${text.substring(0, 15000)}${text.length > 15000 ? '\n...(truncated)' : ''}
 
 EXTRACTION TASKS:
 ${columns.map((col, index) => `${index + 1}. ${col.name}: ${col.prompt} (Type: ${col.type})`).join('\n')}
 
-Return ONLY valid JSON:
+INSTRUCTIONS:
+- Extract exact information requested for each field
+- High confidence (0.8-0.95) if clearly found
+- Medium confidence (0.3-0.7) if partially found
+- Zero confidence if not found
+- Use YYYY-MM-DD for dates, numeric values for numbers
+
+REQUIRED JSON FORMAT:
 {
   "extractions": [
     ${columns.map(col => `{"columnId": "${col.id}", "value": "", "confidence": 0}`).join(',\n    ')}
   ]
 }`;
 
-    const fieldCompletion = await openai.chat.completions.create({
+    console.log("📤 Sending text to OpenAI...");
+
+    const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content: "You are a precise data extraction AI. Extract specific information from document text and return valid JSON only."
+          content: "You are a professional document analysis AI. Extract precise data from text and return valid JSON only."
         },
         {
           role: "user",
           content: extractionPrompt
         }
       ],
-      max_tokens: 1500,
+      max_tokens: 2000,
       temperature: 0.1,
       response_format: { type: "json_object" },
     });
 
-    const response = fieldCompletion.choices[0].message.content;
+    const response = completion.choices[0].message.content;
+    console.log("📥 OpenAI response received");
     
     if (!response) {
-      throw new Error("No response from field extraction");
+      throw new Error("No response from OpenAI");
     }
 
     const parsedResponse = JSON.parse(response);
     
-    return parsedResponse.extractions.map((extraction: any) => ({
+    if (!parsedResponse.extractions || !Array.isArray(parsedResponse.extractions)) {
+      throw new Error("Invalid response format");
+    }
+
+    const results: ExtractionResult[] = parsedResponse.extractions.map((extraction: any) => ({
       columnId: extraction.columnId,
       value: extraction.value || "",
       confidence: Math.min(Math.max(extraction.confidence || 0, 0), 1),
       extractedBy: {
         method: "ai",
         model: "gpt-4o",
-        version: "text-fallback-v1"
+        version: "text-extraction-v1"
       }
     }));
 
+    const successCount = results.filter(r => r.value && r.confidence > 0).length;
+    console.log(`✅ OpenAI extraction completed: ${successCount}/${results.length} successful`);
+
+    return results;
+
   } catch (error: any) {
-    console.error("❌ Text fallback also failed:", error.message);
+    console.error("❌ OpenAI text extraction failed:", error.message);
     
     return columns.map(column => ({
       columnId: column.id,
-      value: `Extraction failed: ${error.message}`,
+      value: `OpenAI extraction failed: ${error.message}`,
       confidence: 0,
       extractedBy: {
         method: "ai",
         model: "gpt-4o",
-        version: "text-fallback-v1-failed"
+        version: "text-extraction-v1-failed"
       }
     }));
   }
 }
 
+// SMART FILE TYPE DETECTION
+function getFileType(document: any): 'image' | 'pdf' | 'unknown' {
+  const mimeType = document.fileMetadata?.mimeType?.toLowerCase() || '';
+  const extension = document.fileMetadata?.extension?.toLowerCase() || '';
+  
+  // Check for PDF
+  if (mimeType.includes('pdf') || extension === 'pdf') {
+    return 'pdf';
+  }
+  
+  // Check for images
+  if (mimeType.startsWith('image/') || 
+      ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
+    return 'image';
+  }
+  
+  return 'unknown';
+}
+
+// MAIN API ROUTE HANDLER
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    console.log("🚀 Starting optimized extraction API");
+    console.log("🚀 CLEAN Extract API called - TypeScript compliant, no import errors!");
     
-    // Connect to MongoDB
     await connectDB();
 
-    // Verify authentication
+    // Authentication
     const authHeader = request.headers.get("authorization");
     const token = authHeader?.replace("Bearer ", "");
 
@@ -272,7 +370,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let user;
+    let user: any;
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
       user = await User.findById(decoded.id).select("-password");
@@ -303,7 +401,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find and validate project access
+    // Verify project access
     const project = await Project.findById(projectId);
     if (!project) {
       return NextResponse.json(
@@ -313,7 +411,7 @@ export async function POST(request: NextRequest) {
     }
 
     const hasAccess = project.ownerId.toString() === user._id.toString() ||
-      project.collaborators.some(collab => collab.userId.toString() === user._id.toString());
+      project.collaborators.some((collab: any) => collab.userId.toString() === user._id.toString());
 
     if (!hasAccess) {
       return NextResponse.json(
@@ -371,31 +469,37 @@ export async function POST(request: NextRequest) {
         throw new Error("Document URL not available");
       }
 
+      // SMART FILE TYPE DETECTION & ROUTING
+      const fileType = getFileType(document);
+      console.log(`📁 Detected file type: ${fileType}`);
       console.log("📄 Processing document:", documentUrl);
       console.log("📋 Extracting", extractionColumns.length, "columns");
 
-      // Primary extraction attempt
-      let extractionResults = await extractDataFromDocument(documentUrl, extractionColumns);
-      
-      // Check if primary extraction was successful
-      const successfulExtractions = extractionResults.filter(r => r.value && r.confidence > 0);
-      const needsFallback = successfulExtractions.length < extractionColumns.length * 0.5; // If less than 50% success
-      
-      if (needsFallback) {
-        console.log("🔄 Primary extraction had limited success, trying text fallback...");
-        const fallbackResults = await extractFromTextFallback(documentUrl, extractionColumns);
-        
-        // Merge results: use fallback for failed primary extractions
-        extractionResults = extractionResults.map(primary => {
-          if (!primary.value || primary.confidence === 0) {
-            const fallback = fallbackResults.find(f => f.columnId === primary.columnId);
-            return fallback || primary;
-          }
-          return primary;
-        });
-      }
+      let extractionResults: ExtractionResult[];
+      let extractionMethod = '';
 
-      // Update document with results
+      // Route to appropriate extraction method
+      switch (fileType) {
+        case 'image':
+          console.log("🖼️ Routing to IMAGE extraction (Vision API)");
+          extractionResults = await extractFromImage(documentUrl, extractionColumns);
+          extractionMethod = 'image-vision-api';
+          break;
+          
+        case 'pdf':
+          console.log("📄 Routing to PDF extraction (Clean Text + OpenAI)");
+          extractionResults = await extractFromPDF(documentUrl, extractionColumns);
+          extractionMethod = 'pdf-clean-text-extraction';
+          break;
+          
+        default:
+          console.log("❓ Unknown file type, trying image extraction as fallback");
+          extractionResults = await extractFromImage(documentUrl, extractionColumns);
+          extractionMethod = 'unknown-fallback-image';
+          break;
+      }
+      
+      // Save results to database
       let successCount = 0;
       for (const result of extractionResults) {
         if (result.value && result.confidence > 0) {
@@ -415,7 +519,8 @@ export async function POST(request: NextRequest) {
 
       // Add audit log
       await document.addAuditLog("processed", user._id, {
-        extractionMethod: "optimized-openai-vision",
+        extractionMethod,
+        fileType,
         columnsProcessed: extractionColumns.length,
         successfulExtractions: successCount,
         processingTimeMs: Date.now() - startTime,
@@ -423,12 +528,14 @@ export async function POST(request: NextRequest) {
 
       const processingTime = Date.now() - startTime;
       
-      console.log(`✅ Extraction completed in ${processingTime}ms`);
+      console.log(`✅ Clean extraction completed in ${processingTime}ms`);
       console.log(`📊 Success rate: ${successCount}/${extractionColumns.length} columns`);
 
       return NextResponse.json({
         success: true,
-        message: `Successfully extracted data for ${successCount} out of ${extractionColumns.length} columns`,
+        message: `Successfully extracted data from ${fileType.toUpperCase()} for ${successCount} out of ${extractionColumns.length} columns`,
+        fileType,
+        extractionMethod,
         processingTimeMs: processingTime,
         data: {
           extractionResults,
@@ -446,11 +553,11 @@ export async function POST(request: NextRequest) {
     } catch (extractionError: any) {
       await document.updateProcessingStatus("failed", null, {
         message: extractionError.message,
-        code: "OPTIMIZED_EXTRACTION_FAILED",
+        code: "CLEAN_EXTRACTION_FAILED",
         processingTimeMs: Date.now() - startTime,
       });
 
-      console.error("❌ Extraction failed:", extractionError);
+      console.error("❌ Clean extraction failed:", extractionError);
       
       return NextResponse.json(
         {
@@ -464,7 +571,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error: any) {
-    console.error("❌ API error:", error);
+    console.error("❌ Clean API error:", error);
     return NextResponse.json(
       {
         success: false,
