@@ -5,20 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:force": "SKIP_TYPE_CHECK=true next build",
-    "build:ignore-errors": "next build --no-lint",
     "start": "next start",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
-    "lint:ignore": "next lint --max-warnings=1000",
     "type-check": "tsc --noEmit",
-    "type-check:ignore": "tsc --noEmit --skipLibCheck",
-    "build:check": "npm run type-check && npm run lint:fix && npm run build",
-    "build:fast": "npm run build:force",
-    "fix-build": "chmod +x fix-build.sh && ./fix-build.sh",
-    "fix-radix": "chmod +x fix-radix-progress.sh && ./fix-radix-progress.sh",
-    "fix-progress": "chmod +x fix-progress-alternative.sh && ./fix-progress-alternative.sh",
-    "emergency-fix": "chmod +x emergency-fix.sh && ./emergency-fix.sh"
+    "cleanup": "node cleanup.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -84,9 +75,6 @@
     "next-themes": "^0.3.0",
     "openai": "^4.28.0",
     "pdf-parse": "^1.1.1",
-    "pdf.js": "^0.1.0",
-    "pdf2pic": "^3.2.0",
-    "pdfjs-dist": "^3.11.174",
     "postcss": "8.4.30",
     "react": "18.2.0",
     "react-day-picker": "^8.10.1",
@@ -100,7 +88,6 @@
     "tailwind-merge": "^2.5.2",
     "tailwindcss": "3.3.3",
     "tailwindcss-animate": "^1.0.7",
-    "tesseract.js": "^5.1.0",
     "typescript": "5.2.2",
     "vaul": "^0.9.9",
     "zod": "^3.23.8",
@@ -115,7 +102,6 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/morgan": "^1.9.9",
     "@types/multer": "^1.4.11",
-    "@types/pdf-parse": "^1.1.5",
     "concurrently": "^8.2.2"
   }
 }
