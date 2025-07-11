@@ -25,6 +25,8 @@ import {
   CheckCircle,
   Clock,
   Brain,
+  Settings,
+  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -42,6 +44,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ColumnSettings } from "@/components/table/column-settings";
 
 import {
   useDocuments,
@@ -50,6 +53,7 @@ import {
   useProjectActions,
 } from "@/lib/stores";
 import { useToast } from "@/hooks/use-toast";
+import { UpdateColumnData } from "@/lib/api/projects";
 
 interface DocumentGridProps {
   projectId: string;
@@ -110,7 +114,83 @@ const DocumentBundleRenderer = ({ data }: any) => {
   );
 };
 
-const DataChipRenderer = ({ value, colDef }: any) => {
+// Updated DataChipRenderer with proper custom properties access
+// Data Chip Detail Modal Component
+const DataChipDetailModal = ({
+  isOpen,
+  onClose,
+  value,
+  columnName,
+  bgColor,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  value: any;
+  columnName: string;
+  bgColor: string;
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 z-[99999] p-4"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        position: "fixed",
+      }}
+    >
+      <div className="bg-white rounded-lg shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[80vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gray-50">
+          <div className="flex items-center space-x-3">
+            <div
+              className="w-4 h-4 rounded-full"
+              style={{ backgroundColor: bgColor }}
+            />
+            <h2 className="text-lg font-semibold text-gray-900">
+              {columnName}
+            </h2>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 hover:bg-gray-200"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Content - Just the full value */}
+        <div className="p-6 overflow-y-auto max-h-[calc(80vh-180px)]">
+          <div className="bg-gray-50 rounded-lg p-6">
+            <p className="text-base leading-relaxed text-gray-900 whitespace-pre-wrap break-words">
+              {value.value}
+            </p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end p-6 border-t border-gray-200 bg-gray-50">
+          <Button
+            onClick={onClose}
+            className="bg-gray-900 hover:bg-gray-800 text-white px-6"
+          >
+            OK
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const DataChipRenderer = ({ value, colDef, column, context }: any) => {
   if (!value || !value.value) {
     return (
       <div className="flex items-center h-full">
@@ -125,96 +205,93 @@ const DataChipRenderer = ({ value, colDef }: any) => {
     return "bg-red-100 text-red-800";
   };
 
-  const customProps = colDef?.customProperties;
-  const bgColor = customProps?.styling?.backgroundColor || "#3b82f6";
+  // Get custom properties from multiple sources
+  const customProps =
+    colDef?.customProperties || column?.getColDef()?.customProperties;
+
+  // Try to get color from various sources
+  let bgColor = "#3b82f6"; // Default color
+
+  if (customProps?.color) {
+    bgColor = customProps.color;
+  } else if (customProps?.styling?.backgroundColor) {
+    bgColor = customProps.styling.backgroundColor;
+  }
+
+  const columnName =
+    customProps?.name || column?.getColDef()?.headerName || "Unknown Column";
+
+  const handleChipClick = () => {
+    if (context?.onDataChipClick) {
+      context.onDataChipClick(value, columnName, bgColor);
+    }
+  };
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex items-center space-x-2 h-full">
-            <div
-              className="px-2 py-1 rounded text-white text-xs font-medium max-w-full truncate"
-              style={{ backgroundColor: bgColor }}
-            >
-              {value.value}
-            </div>
-            {value.confidence && (
-              <Badge
-                variant="secondary"
-                className={`text-xs ${getConfidenceColor(value.confidence)}`}
-              >
-                {Math.round(value.confidence * 100)}%
-              </Badge>
-            )}
-          </div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <div className="space-y-1 text-xs">
-            <p>
-              <strong>Value:</strong> {value.value}
-            </p>
-            <p>
-              <strong>Confidence:</strong>{" "}
-              {Math.round((value.confidence || 0) * 100)}%
-            </p>
-            <p>
-              <strong>Extracted:</strong>{" "}
-              {new Date(value.extractedAt).toLocaleString()}
-            </p>
-            <p>
-              <strong>Method:</strong> {value.extractedBy?.method || "Unknown"}
-            </p>
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <div className="flex items-center space-x-2 h-full">
+      <div
+        className="px-2 py-1 rounded text-white text-xs font-medium max-w-full truncate cursor-pointer hover:opacity-80 transition-opacity"
+        style={{ backgroundColor: bgColor }}
+        onClick={handleChipClick}
+      >
+        {value.value}
+      </div>
+    </div>
   );
 };
 
 const ActionCellRenderer = (params: any) => {
   const { data, api, context } = params;
-  const { downloadDocument, processDocument, deleteDocument, extractDataWithAI } =
-    useDocumentActions();
+  const {
+    downloadDocument,
+    processDocument,
+    deleteDocument,
+    extractDataWithAI,
+  } = useDocumentActions();
   const { toast } = useToast();
   const activeProject = context?.activeProject;
 
   // Check if there are extractable columns
   const hasExtractableColumns = () => {
     if (!activeProject?.gridConfiguration?.columnDefs) return false;
-    
+
     const columnDefs = activeProject.gridConfiguration.columnDefs;
-    
+
     // Check if columnDefs is a Map and iterate properly
     if (columnDefs instanceof Map) {
+      // @ts-ignore
       for (const [columnId, columnDef] of columnDefs.entries()) {
         // Skip system columns (index, filename)
-        if (columnId === 'index' || columnId === 'filename') {
+        if (columnId === "index" || columnId === "filename") {
           continue;
         }
-        
-        if (columnDef.customProperties && 
-            columnDef.customProperties.extraction?.enabled &&
-            columnDef.customProperties.extraction?.status === 'active') {
+
+        if (
+          columnDef.customProperties &&
+          columnDef.customProperties.extraction?.enabled &&
+          columnDef.customProperties.extraction?.status === "active"
+        ) {
           return true;
         }
       }
-    } else if (typeof columnDefs === 'object' && columnDefs !== null) {
+    } else if (typeof columnDefs === "object" && columnDefs !== null) {
       // Handle case where columnDefs might be a plain object
       for (const [columnId, columnDef] of Object.entries(columnDefs)) {
         // Skip system columns (index, filename)
-        if (columnId === 'index' || columnId === 'filename') {
+        if (columnId === "index" || columnId === "filename") {
           continue;
         }
-        
-        if (columnDef.customProperties && 
-            columnDef.customProperties.extraction?.enabled &&
-            columnDef.customProperties.extraction?.status === 'active') {
+
+        if (
+          (columnDef as any).customProperties &&
+          (columnDef as any).customProperties.extraction?.enabled &&
+          (columnDef as any).customProperties.extraction?.status === "active"
+        ) {
           return true;
         }
       }
     }
-    
+
     return false;
   };
 
@@ -253,7 +330,8 @@ const ActionCellRenderer = (params: any) => {
     if (!hasExtractableColumns()) {
       toast({
         title: "No Columns to Extract",
-        description: "Please add columns with extraction rules before extracting data.",
+        description:
+          "Please add columns with extraction rules before extracting data.",
         variant: "destructive",
       });
       return;
@@ -264,10 +342,10 @@ const ActionCellRenderer = (params: any) => {
         title: "Extraction Started",
         description: "AI data extraction has been initiated. Please wait...",
       });
-      
+
       await extractDataWithAI(data.projectId, data.id);
       api.refreshCells();
-      
+
       toast({
         title: "Extraction Completed",
         description: "Data has been successfully extracted from the document.",
@@ -276,7 +354,8 @@ const ActionCellRenderer = (params: any) => {
       console.error("Extraction failed:", error);
       toast({
         title: "Extraction Failed",
-        description: error.message || "Failed to extract data. Please try again.",
+        description:
+          error.message || "Failed to extract data. Please try again.",
         variant: "destructive",
       });
     }
@@ -316,7 +395,9 @@ const ActionCellRenderer = (params: any) => {
               <Download className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Download document</TooltipContent>
+          <TooltipContent position="bottom" side="bottom" align="start">
+            Download document
+          </TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
@@ -333,11 +414,13 @@ const ActionCellRenderer = (params: any) => {
               <Brain className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Extract data with AI</TooltipContent>
+          <TooltipContent side="bottom" align="start">
+            Extract data with AI
+          </TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
-      <TooltipProvider>
+      {/* <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -352,7 +435,7 @@ const ActionCellRenderer = (params: any) => {
           </TooltipTrigger>
           <TooltipContent>Process with AI</TooltipContent>
         </Tooltip>
-      </TooltipProvider>
+      </TooltipProvider> */}
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -376,55 +459,142 @@ const ActionCellRenderer = (params: any) => {
   );
 };
 
-const CustomHeaderRenderer = ({ displayName, column }: any) => {
-  const customProps = column.getColDef().customProperties;
-
-  if (!customProps) {
-    return <span>{displayName}</span>;
-  }
-
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex items-center space-x-2">
-            <div
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: customProps.color }}
-            />
-            <span className="font-medium">{displayName}</span>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <div className="space-y-1 text-xs max-w-xs">
-            <p>
-              <strong>Name:</strong> {customProps.name}
-            </p>
-            <p>
-              <strong>Type:</strong> {customProps.type}
-            </p>
-            <p>
-              <strong>AI Model:</strong> {customProps.aiModel}
-            </p>
-            <p>
-              <strong>Prompt:</strong> {customProps.prompt}
-            </p>
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-};
-
 export function DocumentGrid({
   projectId,
   searchTerm = "",
 }: DocumentGridProps) {
   const documents = useDocuments();
   const { getDocuments, updateExtractedData } = useDocumentActions();
+  const { updateColumn, deleteColumn } = useProjectActions();
   const activeProject = useActiveProject();
   const gridRef = useRef<AgGridReact>(null);
   const [loading, setLoading] = useState(true);
+
+  // Column settings state
+  const [activeColumnSettings, setActiveColumnSettings] = useState<
+    string | null
+  >(null);
+
+  // Data chip modal state
+  const [dataChipModal, setDataChipModal] = useState<{
+    isOpen: boolean;
+    value: any;
+    columnName: string;
+    bgColor: string;
+  }>({
+    isOpen: false,
+    value: null,
+    columnName: "",
+    bgColor: "#3b82f6",
+  });
+
+  // Convert project column definitions to array format (similar to AgGridDocumentTable)
+  const columns = useMemo(() => {
+    if (!activeProject?.gridConfiguration?.columnDefs) return [];
+
+    return Object.entries(activeProject.gridConfiguration.columnDefs)
+      .filter(([key]) => key !== "index" && key !== "filename")
+      .map(([key, colDef]) => ({
+        id: key,
+        name: colDef.headerName,
+        prompt: colDef.customProperties?.prompt || "",
+        aiModel: colDef.customProperties?.aiModel || "gpt-4",
+        width: colDef.width,
+        color: colDef.customProperties?.color,
+        type: colDef.customProperties?.type as any,
+      }));
+  }, [activeProject]);
+
+  // Handle data chip click - MOVED BEFORE columnDefs useMemo
+  const handleDataChipClick = useCallback(
+    (value: any, columnName: string, bgColor: string) => {
+      setDataChipModal({
+        isOpen: true,
+        value,
+        columnName,
+        bgColor,
+      });
+    },
+    []
+  );
+
+  // Custom header for dynamic columns with settings button
+  const CustomHeaderRenderer = ({ displayName, column }: any) => {
+    const colId = column.getColId();
+    const colDef = column.getColDef();
+    const customProps = colDef.customProperties;
+    const col = columns.find((c) => c.id === colId);
+
+    // Don't show settings for system columns
+    if (colId === "index" || colId === "filename" || colId === "actions") {
+      if (!customProps) {
+        return <span>{displayName}</span>;
+      }
+
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center space-x-2">
+                {customProps?.color && (
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: customProps.color }}
+                  />
+                )}
+                <span className="font-medium">{displayName}</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <div className="space-y-1 text-xs max-w-xs">
+                <p>
+                  <strong>Name:</strong> {customProps.name}
+                </p>
+                <p>
+                  <strong>Type:</strong> {customProps.type}
+                </p>
+                <p>
+                  <strong>AI Model:</strong> {customProps.aiModel}
+                </p>
+                <p>
+                  <strong>Prompt:</strong> {customProps.prompt}
+                </p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    const handleSettingsClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      setActiveColumnSettings(colId);
+    };
+
+    return (
+      <div className="flex items-center justify-between pr-2">
+        <div className="flex items-center space-x-2">
+          {customProps?.color && (
+            <div
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: customProps.color }}
+            />
+          )}
+          <span className="truncate font-medium">
+            {col?.name || displayName}
+          </span>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0 hover:bg-gray-200"
+          onClick={handleSettingsClick}
+        >
+          <Settings className="h-3 w-3" />
+        </Button>
+      </div>
+    );
+  };
 
   // Load documents
   useEffect(() => {
@@ -467,6 +637,9 @@ export function DocumentGrid({
         pinned: colDef.pinned || undefined,
         cellStyle: colDef.cellStyle,
         editable: false,
+        // Store custom properties directly in the column definition
+        // @ts-ignore
+        customProperties: colDef.customProperties,
       };
 
       // Custom renderers based on column type
@@ -488,6 +661,12 @@ export function DocumentGrid({
         baseCol.cellRenderer = DataChipRenderer;
         baseCol.headerComponent = CustomHeaderRenderer;
         baseCol.editable = true;
+        baseCol.cellRendererParams = {
+          context: {
+            activeProject,
+            onDataChipClick: handleDataChipClick,
+          },
+        };
         baseCol.valueSetter = (params) => {
           updateExtractedData(projectId, params.data.id, colDef.id, {
             value: params.newValue,
@@ -512,7 +691,7 @@ export function DocumentGrid({
       pinned: "right",
       cellRenderer: ActionCellRenderer,
       cellRendererParams: {
-        context: { activeProject }
+        context: { activeProject },
       },
       cellStyle: {
         display: "flex",
@@ -526,6 +705,7 @@ export function DocumentGrid({
     activeProject?.gridConfiguration?.columnDefs,
     projectId,
     updateExtractedData,
+    handleDataChipClick, // Add this as a dependency
   ]);
 
   // Process row data to include projectId
@@ -543,6 +723,29 @@ export function DocumentGrid({
   const onCellValueChanged = useCallback((event: CellValueChangedEvent) => {
     console.log("Cell value changed:", event);
   }, []);
+
+  // Set a column color
+  const setColumnColor = async (columnId: string, color: string) => {
+    await updateColumn(projectId, columnId, { color });
+  };
+
+  // Update column settings
+  const updateColumnSettings = async (
+    columnId: string,
+    updates: Partial<UpdateColumnData>
+  ) => {
+    await updateColumn(projectId, columnId, updates);
+  };
+
+  // Handle column deletion
+  const handleDeleteColumn = async (columnId: string) => {
+    try {
+      await deleteColumn(projectId, columnId);
+      setActiveColumnSettings(null);
+    } catch (error) {
+      console.error("Delete column error:", error);
+    }
+  };
 
   const defaultColDef = useMemo(
     () => ({
@@ -591,7 +794,25 @@ export function DocumentGrid({
   }
 
   return (
-    <div className="h-full w-full ag-theme-alpine">
+    <div className="h-full w-full ag-theme-alpine relative">
+      <style jsx global>{`
+        .ag-theme-alpine .ag-header-cell {
+          border-right: 1px solid #e5e7eb !important;
+        }
+        .ag-theme-alpine .ag-cell {
+          border-right: 1px solid #e5e7eb !important;
+        }
+        .ag-theme-alpine .ag-header-cell-resize::after {
+          display: none;
+        }
+        .ag-theme-alpine .ag-pinned-left-header .ag-header-cell {
+          border-right: 2px solid #d1d5db !important;
+        }
+        .ag-theme-alpine .ag-pinned-left-cols .ag-cell {
+          border-right: 2px solid #d1d5db !important;
+        }
+      `}</style>
+
       <AgGridReact
         ref={gridRef}
         columnDefs={columnDefs}
@@ -604,6 +825,35 @@ export function DocumentGrid({
         allowContextMenuWithControlKey={true}
         preventDefaultOnContextMenu={true}
       />
+
+      {/* Column Settings Modal - Centered */}
+      {activeColumnSettings && (
+        <ColumnSettings
+          column={columns.find((col) => col.id === activeColumnSettings)!}
+          onClose={() => setActiveColumnSettings(null)}
+          onDelete={() => handleDeleteColumn(activeColumnSettings)}
+          onColorChange={(color) => setColumnColor(activeColumnSettings, color)}
+          onUpdate={(updates) =>
+            updateColumnSettings(
+              activeColumnSettings,
+              updates as Partial<UpdateColumnData>
+            )
+          }
+        />
+      )}
+
+      {/* Data Chip Detail Modal */}
+      {dataChipModal.isOpen && (
+        <DataChipDetailModal
+          isOpen={dataChipModal.isOpen}
+          onClose={() =>
+            setDataChipModal((prev) => ({ ...prev, isOpen: false }))
+          }
+          value={dataChipModal.value}
+          columnName={dataChipModal.columnName}
+          bgColor={dataChipModal.bgColor}
+        />
+      )}
     </div>
   );
 }
