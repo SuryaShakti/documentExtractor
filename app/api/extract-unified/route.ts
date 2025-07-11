@@ -1,6 +1,6 @@
-// app/api/extract/route.ts
-// CLEAN UNIFIED EXTRACTION - No complex imports, TypeScript compliant
-// Handles both images (Vision API) and PDFs (text extraction)
+// app/api/extract-unified/route.ts
+// UNIFIED EXTRACTION ROUTE - Automatically handles both images and PDFs
+// This replaces your current extraction routes with smart file type detection
 
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/database/mongodb";
@@ -134,21 +134,42 @@ REQUIRED JSON FORMAT:
   }
 }
 
-// PDF PROCESSING - Clean text extraction + OpenAI processing
+// PDF PROCESSING - Multi-method text extraction + OpenAI text processing
 async function extractFromPDF(
   documentUrl: string,
   columns: ExtractionColumn[]
 ): Promise<ExtractionResult[]> {
-  console.log("📄 Processing PDF with clean text extraction...");
+  console.log("📄 Processing PDF with text extraction...");
   
   try {
-    // Step 1: Download PDF
+    // Download PDF
     const pdfBuffer = await downloadPDFBuffer(documentUrl);
     
-    // Step 2: Extract text using pdf-parse only
-    const extractedText = await extractTextWithPDFParse(pdfBuffer);
+    // Try multiple text extraction methods
+    let extractedText = '';
+    const methods = [
+      { name: 'PDF.js', fn: extractWithPDFJS },
+      { name: 'pdf-parse', fn: extractWithPDFParse },
+      { name: 'OCR', fn: extractWithOCR }
+    ];
     
-    // Step 3: Process extracted text with OpenAI
+    for (const method of methods) {
+      try {
+        console.log(`🔄 Trying ${method.name}...`);
+        extractedText = await method.fn(pdfBuffer);
+        console.log(`✅ ${method.name} succeeded!`);
+        break;
+      } catch (error: any) {
+        console.log(`❌ ${method.name} failed: ${error.message}`);
+        continue;
+      }
+    }
+    
+    if (!extractedText || extractedText.length < 50) {
+      throw new Error('All PDF text extraction methods failed');
+    }
+    
+    // Process extracted text with OpenAI
     return await extractDataFromText(extractedText, columns);
     
   } catch (error: any) {
@@ -167,74 +188,123 @@ async function extractFromPDF(
   }
 }
 
-// Helper: Download PDF buffer with proper error handling
+// Helper: Download PDF buffer
 async function downloadPDFBuffer(url: string): Promise<Buffer> {
-  console.log(`📥 Downloading PDF from: ${url}`);
-  
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'User-Agent': 'DocumentExtractor/1.0',
-        'Accept': 'application/pdf,*/*'
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    const contentType = response.headers.get('content-type') || '';
-    console.log(`📄 Content-Type: ${contentType}`);
-    
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    console.log(`✅ PDF downloaded: ${buffer.length} bytes`);
-    
-    // Verify it's a PDF by checking the header
-    const header = buffer.toString('ascii', 0, 5);
-    if (!header.startsWith('%PDF')) {
-      throw new Error(`Invalid PDF file: header is '${header}', expected '%PDF'`);
-    }
-    
-    console.log(`✅ PDF header verified: ${header}`);
-    return buffer;
-    
-  } catch (error: any) {
-    console.error('❌ PDF download failed:', error.message);
-    throw new Error(`Failed to download PDF: ${error.message}`);
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }
 
-// Helper: Clean pdf-parse text extraction
-async function extractTextWithPDFParse(pdfBuffer: Buffer): Promise<string> {
-  console.log(`📚 Processing PDF buffer: ${pdfBuffer.length} bytes with pdf-parse...`);
-  
+// Helper: PDF.js text extraction
+async function extractWithPDFJS(pdfBuffer: Buffer): Promise<string> {
+  // Try multiple import paths for different pdfjs-dist versions
+  let pdfjsLib;
   try {
-    // Simple dynamic import for pdf-parse
-    const { default: pdfParse } = await import('pdf-parse');
-    
-    const data = await pdfParse(pdfBuffer, {
-      // normalizeWhitespace: false,
-      // disableCombineTextItems: false
-    });
-    
-    console.log(`📊 PDF parse results: ${data.numpages} pages, ${data.text.length} characters`);
-    
-    if (!data.text || data.text.length < 50) {
-      throw new Error(`PDF contains insufficient text: ${data.text.length} characters`);
+    // For pdfjs-dist v4.x and newer
+    pdfjsLib = await import('pdfjs-dist');
+  } catch (e1) {
+    try {
+      // For pdfjs-dist v3.x
+      pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.js');
+    } catch (e2) {
+      try {
+        // Alternative path
+        pdfjsLib = await import('pdfjs-dist/build/pdf');
+      } catch (e3) {
+        throw new Error('Could not import pdfjs-dist. Please ensure it is installed correctly.');
+      }
     }
-    
-    console.log(`✅ pdf-parse SUCCESS! Text: ${data.text.length} characters`);
-    console.log(`📄 Text preview: ${data.text.substring(0, 300)}...`);
-    
-    return data.text;
-    
-  } catch (error: any) {
-    console.error('❌ pdf-parse failed:', error.message);
-    throw new Error(`pdf-parse extraction failed: ${error.message}`);
   }
+  
+  // Configure PDF.js for server environment
+  if (pdfjsLib.GlobalWorkerOptions) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = null;
+  }
+  
+  const pdf = await pdfjsLib.getDocument({
+    data: new Uint8Array(pdfBuffer),
+    useWorkerFetch: false,
+    isEvalSupported: false,
+  }).promise;
+  
+  const textContent = [];
+  const maxPages = Math.min(pdf.numPages, 20);
+  
+  for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+    try {
+      const page = await pdf.getPage(pageNum);
+      const content = await page.getTextContent();
+      const pageText = content.items
+        .map((item: any) => item.str || '')
+        .filter(text => text.trim().length > 0)
+        .join(' ');
+      
+      if (pageText.trim()) {
+        textContent.push(pageText);
+      }
+    } catch (pageError: any) {
+      console.warn(`Page ${pageNum} failed:`, pageError.message);
+    }
+  }
+  
+  const fullText = textContent.join('\n\n');
+  if (fullText.length < 100) {
+    throw new Error('Insufficient text extracted');
+  }
+  
+  return fullText;
+}
+
+// Helper: pdf-parse extraction
+async function extractWithPDFParse(pdfBuffer: Buffer): Promise<string> {
+  const pdfParse = await import('pdf-parse');
+  const data = await pdfParse.default(pdfBuffer);
+  
+  if (!data.text || data.text.length < 100) {
+    throw new Error('pdf-parse extracted insufficient text');
+  }
+  
+  return data.text;
+}
+
+// Helper: OCR extraction
+async function extractWithOCR(pdfBuffer: Buffer): Promise<string> {
+  const pdf2pic = await import('pdf2pic');
+  const Tesseract = await import('tesseract.js');
+  
+  const convert = pdf2pic.default.fromBuffer(pdfBuffer, {
+    density: 200,
+    format: 'png',
+    width: 2000,
+    height: 2000
+  });
+  
+  const ocrTexts = [];
+  const maxPages = 3;
+  
+  for (let page = 1; page <= maxPages; page++) {
+    try {
+      const result = await convert(page, { responseType: 'buffer' });
+      const { data: { text } } = await Tesseract.default.recognize(result.buffer, 'eng');
+      
+      if (text.trim().length > 20) {
+        ocrTexts.push(text.trim());
+      }
+    } catch (pageError: any) {
+      console.warn(`OCR page ${page} failed:`, pageError.message);
+      break;
+    }
+  }
+  
+  const fullText = ocrTexts.join('\n\n');
+  if (fullText.length < 50) {
+    throw new Error('OCR produced insufficient text');
+  }
+  
+  return fullText;
 }
 
 // Helper: Extract data from text using OpenAI
@@ -242,10 +312,7 @@ async function extractDataFromText(
   text: string,
   columns: ExtractionColumn[]
 ): Promise<ExtractionResult[]> {
-  console.log("🤖 Processing extracted text with OpenAI...");
-  
-  try {
-    const extractionPrompt = `Analyze this document text and extract the following information. Return ONLY valid JSON.
+  const extractionPrompt = `Analyze this document text and extract the following information. Return ONLY valid JSON.
 
 DOCUMENT TEXT:
 ${text.substring(0, 15000)}${text.length > 15000 ? '\n...(truncated)' : ''}
@@ -267,68 +334,44 @@ REQUIRED JSON FORMAT:
   ]
 }`;
 
-    console.log("📤 Sending text to OpenAI...");
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: "You are a professional document analysis AI. Extract precise data from text and return valid JSON only."
-        },
-        {
-          role: "user",
-          content: extractionPrompt
-        }
-      ],
-      max_tokens: 2000,
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-    });
-
-    const response = completion.choices[0].message.content;
-    console.log("📥 OpenAI response received");
-    
-    if (!response) {
-      throw new Error("No response from OpenAI");
-    }
-
-    const parsedResponse = JSON.parse(response);
-    
-    if (!parsedResponse.extractions || !Array.isArray(parsedResponse.extractions)) {
-      throw new Error("Invalid response format");
-    }
-
-    const results: ExtractionResult[] = parsedResponse.extractions.map((extraction: any) => ({
-      columnId: extraction.columnId,
-      value: extraction.value || "",
-      confidence: Math.min(Math.max(extraction.confidence || 0, 0), 1),
-      extractedBy: {
-        method: "ai",
-        model: "gpt-4o",
-        version: "text-extraction-v1"
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content: "You are a professional document analysis AI. Extract precise data from text and return valid JSON only."
+      },
+      {
+        role: "user",
+        content: extractionPrompt
       }
-    }));
+    ],
+    max_tokens: 2000,
+    temperature: 0.1,
+    response_format: { type: "json_object" },
+  });
 
-    const successCount = results.filter(r => r.value && r.confidence > 0).length;
-    console.log(`✅ OpenAI extraction completed: ${successCount}/${results.length} successful`);
-
-    return results;
-
-  } catch (error: any) {
-    console.error("❌ OpenAI text extraction failed:", error.message);
-    
-    return columns.map(column => ({
-      columnId: column.id,
-      value: `OpenAI extraction failed: ${error.message}`,
-      confidence: 0,
-      extractedBy: {
-        method: "ai",
-        model: "gpt-4o",
-        version: "text-extraction-v1-failed"
-      }
-    }));
+  const response = completion.choices[0].message.content;
+  if (!response) {
+    throw new Error("No response from OpenAI");
   }
+
+  const parsedResponse = JSON.parse(response);
+  
+  if (!parsedResponse.extractions || !Array.isArray(parsedResponse.extractions)) {
+    throw new Error("Invalid response format");
+  }
+
+  return parsedResponse.extractions.map((extraction: any) => ({
+    columnId: extraction.columnId,
+    value: extraction.value || "",
+    confidence: Math.min(Math.max(extraction.confidence || 0, 0), 1),
+    extractedBy: {
+      method: "ai",
+      model: "gpt-4o",
+      version: "text-extraction-v1"
+    }
+  }));
 }
 
 // SMART FILE TYPE DETECTION
@@ -355,7 +398,7 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    console.log("🚀 CLEAN Extract API called - TypeScript compliant, no import errors!");
+    console.log("🚀 Unified Extraction API called");
     
     await connectDB();
 
@@ -370,7 +413,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let user: any;
+    let user;
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
       user = await User.findById(decoded.id).select("-password");
@@ -411,7 +454,7 @@ export async function POST(request: NextRequest) {
     }
 
     const hasAccess = project.ownerId.toString() === user._id.toString() ||
-      project.collaborators.some((collab: any) => collab.userId.toString() === user._id.toString());
+      project.collaborators.some(collab => collab.userId.toString() === user._id.toString());
 
     if (!hasAccess) {
       return NextResponse.json(
@@ -487,9 +530,9 @@ export async function POST(request: NextRequest) {
           break;
           
         case 'pdf':
-          console.log("📄 Routing to PDF extraction (Clean Text + OpenAI)");
+          console.log("📄 Routing to PDF extraction (Text + OpenAI)");
           extractionResults = await extractFromPDF(documentUrl, extractionColumns);
-          extractionMethod = 'pdf-clean-text-extraction';
+          extractionMethod = 'pdf-text-extraction';
           break;
           
         default:
@@ -528,7 +571,7 @@ export async function POST(request: NextRequest) {
 
       const processingTime = Date.now() - startTime;
       
-      console.log(`✅ Clean extraction completed in ${processingTime}ms`);
+      console.log(`✅ Unified extraction completed in ${processingTime}ms`);
       console.log(`📊 Success rate: ${successCount}/${extractionColumns.length} columns`);
 
       return NextResponse.json({
@@ -553,11 +596,11 @@ export async function POST(request: NextRequest) {
     } catch (extractionError: any) {
       await document.updateProcessingStatus("failed", null, {
         message: extractionError.message,
-        code: "CLEAN_EXTRACTION_FAILED",
+        code: "UNIFIED_EXTRACTION_FAILED",
         processingTimeMs: Date.now() - startTime,
       });
 
-      console.error("❌ Clean extraction failed:", extractionError);
+      console.error("❌ Unified extraction failed:", extractionError);
       
       return NextResponse.json(
         {
@@ -571,7 +614,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error: any) {
-    console.error("❌ Clean API error:", error);
+    console.error("❌ Unified API error:", error);
     return NextResponse.json(
       {
         success: false,
