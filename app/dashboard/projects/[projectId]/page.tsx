@@ -44,6 +44,8 @@ import {
 import { DocumentGrid } from "@/components/dashboard/DocumentGrid";
 import { UploadDocumentDialog } from "@/components/dashboard/UploadDocumentDialog";
 import { AddColumnDialog } from "@/components/dashboard/AddColumnDialog";
+import { ExportDialog } from "@/components/dashboard/ExportDialog";
+import { QuickExportButton } from "@/components/dashboard/QuickExportButton";
 
 export default function ProjectPage() {
   const params = useParams();
@@ -58,6 +60,7 @@ export default function ProjectPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showAddColumnDialog, setShowAddColumnDialog] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
 
   const [isStatsVisible, setIsStatsVisible] = useState(true);
 
@@ -186,6 +189,13 @@ export default function ProjectPage() {
                   Upload
                 </Button>
 
+                <QuickExportButton
+                  projectId={projectId}
+                  type="project"
+                  variant="outline"
+                  size="sm"
+                />
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm">
@@ -193,7 +203,7 @@ export default function ProjectPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setShowExportDialog(true)}>
                       <Download className="mr-2 h-4 w-4" />
                       Export Data
                     </DropdownMenuItem>
@@ -349,6 +359,13 @@ export default function ProjectPage() {
         open={showAddColumnDialog}
         onOpenChange={setShowAddColumnDialog}
         projectId={projectId}
+      />
+
+      <ExportDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+        projectId={projectId}
+        type="project"
       />
     </div>
   );

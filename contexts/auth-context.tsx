@@ -9,6 +9,7 @@ import {
   useCallback,
 } from "react";
 import { User } from "@/lib/api/auth";
+import Cookies from "js-cookie";
 
 // Storage usage type
 type StorageUsage = {
@@ -27,7 +28,7 @@ interface AuthContextType {
   loading: boolean;
   token: string | null;
   error: string | null;
-  
+
   // Core Actions
   login: (email: string, password: string) => Promise<void>;
   register: (
@@ -38,25 +39,28 @@ interface AuthContextType {
   ) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
-  
+
   // Profile Management
   updateProfile: (data: Partial<User>) => Promise<void>;
-  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
-  
+  changePassword: (
+    currentPassword: string,
+    newPassword: string
+  ) => Promise<void>;
+
   // Utility Methods
   clearError: () => void;
   refreshUser: () => Promise<void>;
-  
+
   // Permission & Capability Checks
   isAdmin: () => boolean;
   hasValidSubscription: () => boolean;
   canCreateProject: () => boolean;
   canUploadDocument: (fileSize?: number) => boolean;
-  
+
   // Storage Management
   getStorageUsage: () => StorageUsage;
   formatStorageSize: (bytes: number) => string;
-  
+
   // Subscription Helpers
   getProjectLimit: () => number;
   getStorageLimit: () => number;
@@ -107,14 +111,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         used: 0,
         limit: 0,
         percentage: 0,
-        formatted: { used: "0 B", limit: "0 B" }
+        formatted: { used: "0 B", limit: "0 B" },
       };
     }
 
     const limits = {
       free: 100 * 1024 * 1024, // 100MB
       basic: 1024 * 1024 * 1024, // 1GB
-      premium: 10 * 1024 * 1024 * 1024 // 10GB
+      premium: 10 * 1024 * 1024 * 1024, // 10GB
     };
 
     const limit = limits[user.subscription.plan] || limits.free;
@@ -127,8 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       percentage,
       formatted: {
         used: formatStorageSize(used),
-        limit: formatStorageSize(limit)
-      }
+        limit: formatStorageSize(limit),
+      },
     };
   }, [user, formatStorageSize]);
 
@@ -154,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const limits = {
       free: 100 * 1024 * 1024, // 100MB
       basic: 1024 * 1024 * 1024, // 1GB
-      premium: 10 * 1024 * 1024 * 1024 // 10GB
+      premium: 10 * 1024 * 1024 * 1024, // 10GB
     };
     return limits[user.subscription.plan] || 0;
   }, [user]);
@@ -164,11 +168,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user.stats.projectsCount < getProjectLimit();
   }, [user, getProjectLimit]);
 
-  const canUploadDocument = useCallback((fileSize = 0): boolean => {
-    if (!user) return false;
-    const storageLimit = getStorageLimit();
-    return user.stats.storageUsed + fileSize <= storageLimit;
-  }, [user, getStorageLimit]);
+  const canUploadDocument = useCallback(
+    (fileSize = 0): boolean => {
+      if (!user) return false;
+      const storageLimit = getStorageLimit();
+      return user.stats.storageUsed + fileSize <= storageLimit;
+    },
+    [user, getStorageLimit]
+  );
 
   const getRemainingProjects = useCallback((): number => {
     if (!user) return 0;
@@ -212,6 +219,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Persist to localStorage
         localStorage.setItem("auth_token", data.data.token);
         localStorage.setItem("user", JSON.stringify(data.data.user));
+
+        // --- SET THE COOKIE HERE ---
+        Cookies.set("access_token", data.data.token, {
+          expires: 7,
+          path: "/",
+          sameSite: "lax",
+          // secure: process.env.NODE_ENV === "production", // Uncomment for HTTPS
+        });
       } else {
         throw new Error("Invalid response format");
       }
@@ -296,7 +311,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // Change password function
-  const changePassword = async (currentPassword: string, newPassword: string) => {
+  const changePassword = async (
+    currentPassword: string,
+    newPassword: string
+  ) => {
     try {
       setLoading(true);
       setError(null);
@@ -338,6 +356,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(null);
       localStorage.removeItem("auth_token");
       localStorage.removeItem("user");
+      Cookies.remove("access_token");
 
       // Redirect to login
       window.location.href = "/login";
@@ -349,7 +368,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setError(null);
       const response = await makeAuthenticatedRequest("/auth/me");
-      
+
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.user) {
@@ -419,31 +438,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         token,
         error,
-        
+
         // Core Actions
         login,
         register,
         logout,
         checkAuth,
-        
+
         // Profile Management
         updateProfile,
         changePassword,
-        
+
         // Utility Methods
         clearError,
         refreshUser,
-        
+
         // Permission & Capability Checks
         isAdmin,
         hasValidSubscription,
         canCreateProject,
         canUploadDocument,
-        
+
         // Storage Management
         getStorageUsage,
         formatStorageSize,
-        
+
         // Subscription Helpers
         getProjectLimit,
         getStorageLimit,
@@ -496,16 +515,16 @@ export function useStorageUsage() {
 }
 
 export function useAuthActions() {
-  const { 
-    login, 
-    register, 
-    logout, 
-    updateProfile, 
-    changePassword, 
-    clearError, 
-    refreshUser 
+  const {
+    login,
+    register,
+    logout,
+    updateProfile,
+    changePassword,
+    clearError,
+    refreshUser,
   } = useAuth();
-  
+
   return {
     login,
     register,

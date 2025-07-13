@@ -45,6 +45,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ColumnSettings } from "@/components/table/column-settings";
+import { ExportDialog } from "./ExportDialog";
 
 import {
   useDocuments,
@@ -381,6 +382,13 @@ const ActionCellRenderer = (params: any) => {
     }
   };
 
+  const handleExport = () => {
+    // This will be handled by the parent component
+    if (params.context?.onExportDocument) {
+      params.context.onExportDocument(data.id);
+    }
+  };
+
   return (
     <div className="flex items-center space-x-1 h-full">
       <TooltipProvider>
@@ -448,6 +456,10 @@ const ActionCellRenderer = (params: any) => {
             <ExternalLink className="mr-2 h-4 w-4" />
             View Original
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleExport}>
+            <FileText className="mr-2 h-4 w-4" />
+            Export Data
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleDelete} className="text-red-600">
             <Trash2 className="mr-2 h-4 w-4" />
@@ -487,6 +499,22 @@ export function DocumentGrid({
     columnName: "",
     bgColor: "#3b82f6",
   });
+
+  // Export dialog state
+  const [exportDialog, setExportDialog] = useState<{
+    isOpen: boolean;
+    documentId?: string;
+  }>({
+    isOpen: false,
+  });
+
+  // Handle document export
+  const handleExportDocument = (documentId: string) => {
+    setExportDialog({
+      isOpen: true,
+      documentId,
+    });
+  };
 
   // Convert project column definitions to array format (similar to AgGridDocumentTable)
   const columns = useMemo(() => {
@@ -691,7 +719,10 @@ export function DocumentGrid({
       pinned: "right",
       cellRenderer: ActionCellRenderer,
       cellRendererParams: {
-        context: { activeProject },
+        context: {
+          activeProject,
+          onExportDocument: handleExportDocument,
+        },
       },
       cellStyle: {
         display: "flex",
@@ -852,6 +883,17 @@ export function DocumentGrid({
           value={dataChipModal.value}
           columnName={dataChipModal.columnName}
           bgColor={dataChipModal.bgColor}
+        />
+      )}
+
+      {/* Export Dialog */}
+      {exportDialog.isOpen && (
+        <ExportDialog
+          open={exportDialog.isOpen}
+          onOpenChange={(open) => setExportDialog({ isOpen: open })}
+          projectId={projectId}
+          documentId={exportDialog.documentId}
+          type="document"
         />
       )}
     </div>
