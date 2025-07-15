@@ -27,7 +27,8 @@ export {
   useCurrentCollection, 
   useCollectionLoading, 
   useCollectionError, 
-  useCollectionActions 
+  useCollectionActions,
+  useExtractionStates 
 } from './collectionStore';
 
 // Combined selectors for common use cases

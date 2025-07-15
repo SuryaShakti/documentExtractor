@@ -54,9 +54,11 @@ import {
   useActiveProject,
   useProjectActions,
   useCollectionActions,
+  useExtractionStates,
 } from "@/lib/stores";
 import { useToast } from "@/hooks/use-toast";
 import { UpdateColumnData } from "@/lib/api/projects";
+import { Shimmer } from "@/components/ui/shimmer";
 
 interface DocumentGridProps {
   projectId: string;
@@ -209,7 +211,27 @@ const DataChipDetailModal = ({
   );
 };
 
-const DataChipRenderer = ({ value, colDef, column, context }: any) => {
+const DataChipRenderer = ({ value, colDef, column, context, data }: any) => {
+  const colId = column.getColId();
+  const extractionStates = context?.extractionStates || new Map();
+  const extractionState = extractionStates.get(data?.id);
+  
+  // Check if this specific column is being extracted
+  const isExtracting = extractionState?.isExtracting && 
+    (extractionState.extractingColumns.includes(colId) || extractionState.extractingColumns.length === 0);
+
+  // Show shimmer during extraction
+  if (isExtracting) {
+    const customProps = colDef?.customProperties || column?.getColDef()?.customProperties;
+    const bgColor = customProps?.color || customProps?.styling?.backgroundColor || "#3b82f6";
+    
+    return (
+      <div className="flex items-center h-full">
+        <Shimmer variant="data-chip" bgColor={bgColor} className="w-20" />
+      </div>
+    );
+  }
+
   if (!value || !value.value) {
     return (
       <div className="flex items-center h-full">
@@ -265,6 +287,7 @@ const ActionCellRenderer = (params: any) => {
     downloadDocument,
     processDocument,
     deleteDocument,
+    getDocuments,
   } = useDocumentActions();
   const { extractData, deleteCollection } = useCollectionActions();
   const { toast } = useToast();
@@ -362,13 +385,23 @@ const ActionCellRenderer = (params: any) => {
         description: "AI data extraction has been initiated. Please wait...",
       });
 
-      // Extract data for the collection instead of individual document
-      await extractData(data.id);
+      // Extract data for the collection - this will update the store in real-time
+      const result = await extractData(data.id);
+      
+      // Refresh the documents/collections data to get the latest extracted data
+      if (context?.projectId) {
+        await getDocuments(context.projectId);
+      }
+      
+      // Force grid refresh to show new data immediately
       api.refreshCells();
+      
+      // Optionally, redraw rows to ensure all data is updated
+      api.redrawRows();
 
       toast({
         title: "Extraction Completed",
-        description: "Data has been successfully extracted from the collection.",
+        description: `Successfully extracted data for ${result?.data?.columnsProcessed || 'multiple'} columns.`,
       });
     } catch (error: any) {
       console.error("Extraction failed:", error);
@@ -436,13 +469,20 @@ const ActionCellRenderer = (params: any) => {
               size="sm"
               className="h-8 w-8 p-0"
               onClick={handleExtractData}
-              disabled={data.status === "processing"}
+              disabled={data.status === "processing" || context?.extractionStates?.get(data.id)?.isExtracting}
             >
-              <Brain className="h-4 w-4" />
+              {context?.extractionStates?.get(data.id)?.isExtracting ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+              ) : (
+                <Brain className="h-4 w-4" />
+              )}
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom" align="start">
-            Extract data with AI
+            {context?.extractionStates?.get(data.id)?.isExtracting 
+              ? "Extracting data..." 
+              : "Extract data with AI"
+            }
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -505,6 +545,7 @@ export function DocumentGrid({
     reorderDocuments 
   } = useCollectionActions();
   const activeProject = useActiveProject();
+  const extractionStates = useExtractionStates();
   const gridRef = useRef<AgGridReact>(null);
   const [loading, setLoading] = useState(true);
 
@@ -741,6 +782,7 @@ export function DocumentGrid({
           context: {
             activeProject,
             onDataChipClick: handleDataChipClick,
+            extractionStates,
           },
         };
         baseCol.valueSetter = (params) => {
@@ -773,6 +815,8 @@ export function DocumentGrid({
         context: {
           activeProject,
           onExportDocument: handleExportDocument,
+          extractionStates,
+          projectId,
         },
       },
       cellStyle: {
@@ -787,7 +831,8 @@ export function DocumentGrid({
     activeProject?.gridConfiguration?.columnDefs,
     projectId,
     updateExtractedData,
-    handleDataChipClick, // Add this as a dependency
+    handleDataChipClick,
+    extractionStates, // Add extraction states as dependency
   ]);
 
   // Process row data to include projectId and collection click handler

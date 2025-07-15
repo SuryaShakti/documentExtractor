@@ -192,6 +192,12 @@ interface CollectionState {
   currentCollection: DocumentCollection | null;
   isLoading: boolean;
   error: string | null;
+  // Real-time extraction tracking
+  extractionStates: Map<string, {
+    isExtracting: boolean;
+    extractingColumns: string[];
+    startedAt?: Date;
+  }>;
 
   getCollections: (
     projectId: string,
@@ -239,6 +245,7 @@ export const useCollectionStore = create<CollectionState>()(
       currentCollection: null,
       isLoading: false,
       error: null,
+      extractionStates: new Map(),
 
       getCollections: async (projectId, params) => {
         try {
@@ -473,19 +480,80 @@ export const useCollectionStore = create<CollectionState>()(
       ) => {
         try {
           set({ error: null });
+          
+          // Set extraction state
+          const extractingColumns = columnId ? [columnId] : (columns || []);
+          set((state) => {
+            const newExtractionStates = new Map(state.extractionStates);
+            newExtractionStates.set(collectionId, {
+              isExtracting: true,
+              extractingColumns,
+              startedAt: new Date()
+            });
+            return { extractionStates: newExtractionStates };
+          });
+          
           const response = await collectionService.extractData(
             collectionId,
             columnId,
             columns,
             forceReextract
           );
+          
           if (response.success) {
-            await get().getCollection(collectionId);
+            // Update the current collection with extracted data immediately
+            const currentState = get();
+            if (currentState.currentCollection?._id === collectionId) {
+              set((state) => ({
+                currentCollection: {
+                  ...state.currentCollection!,
+                  extractedData: new Map([
+                    ...state.currentCollection!.extractedData,
+                    ...Object.entries(response.data.extractedData || {})
+                  ])
+                }
+              }));
+            }
+            
+            // Update collections list if data is available
+            if (response.data?.extractedData) {
+              set((state) => ({
+                collections: state.collections.map(collection => {
+                  if (collection._id === collectionId) {
+                    return {
+                      ...collection,
+                      extractedData: new Map([
+                        ...collection.extractedData,
+                        ...Object.entries(response.data.extractedData || {})
+                      ])
+                    };
+                  }
+                  return collection;
+                })
+              }));
+            }
+            
+            // Clear extraction state
+            set((state) => {
+              const newExtractionStates = new Map(state.extractionStates);
+              newExtractionStates.delete(collectionId);
+              return { extractionStates: newExtractionStates };
+            });
+            
+            return response;
           } else {
             throw new Error(response.error || "Failed to extract data");
           }
         } catch (error: any) {
-          set({ error: error.message || "Failed to extract data" });
+          // Clear extraction state on error
+          set((state) => {
+            const newExtractionStates = new Map(state.extractionStates);
+            newExtractionStates.delete(collectionId);
+            return { 
+              extractionStates: newExtractionStates,
+              error: error.message || "Failed to extract data"
+            };
+          });
           throw error;
         }
       },
@@ -508,6 +576,8 @@ export const useCollectionLoading = () =>
   useCollectionStore((state) => state.isLoading);
 export const useCollectionError = () =>
   useCollectionStore((state) => state.error);
+export const useExtractionStates = () =>
+  useCollectionStore((state) => state.extractionStates);
 
 // ------------------ Actions ------------------
 
