@@ -604,8 +604,31 @@ export async function POST(
       // Check if we need to extract data for individual documents first
       const documentsNeedingExtraction = visibleDocuments.filter((doc: any) => {
         const existingData = doc.extractedData?.get(colId);
-        const needsExtraction = forceReextract || !existingData || !existingData.value;
-        console.log(`Document ${doc.filename}: needs extraction = ${needsExtraction}`);
+        
+        // Define demo/mock values that indicate fake data
+        const demoValues = [
+          'Important Document', 'Contract Agreement', 'Report Summary',
+          '2024-01-15', '2023-12-01', '2024-03-22', 
+          '$1,250.00', '$899.99', '$15,000.00',
+          'New York, NY', 'Los Angeles, CA', 'Chicago, IL',
+          'John Smith', 'Sarah Johnson', 'Michael Brown',
+          'Acme Corp', 'TechStart Inc', 'Global Solutions LLC',
+          'Active', 'Pending', 'Completed',
+          'Set A', 'Category B', 'Group 1'
+        ];
+        
+        // Force extraction if:
+        // 1. forceReextract is true
+        // 2. No existing data
+        // 3. Empty value
+        // 4. Value is a known demo/mock value
+        const isDemoData = existingData?.value && demoValues.includes(existingData.value);
+        const needsExtraction = forceReextract || !existingData || !existingData.value || isDemoData;
+        
+        if (isDemoData) {
+          console.log(`🚨 DEMO DATA DETECTED in ${doc.filename} for column ${colId}: "${existingData.value}" - forcing re-extraction with OpenAI`);
+        }
+        console.log(`Document ${doc.filename}: needs extraction = ${needsExtraction}${isDemoData ? ' (demo data detected)' : ''}`);
         return needsExtraction;
       });
 
