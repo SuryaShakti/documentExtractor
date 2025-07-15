@@ -1,30 +1,36 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { 
-  Users, 
-  FolderOpen, 
-  FileText, 
-  TrendingUp, 
+import { useEffect, useState } from "react";
+import {
+  Users,
+  FolderOpen,
+  FileText,
+  TrendingUp,
   Activity,
   Calendar,
   Download,
   UserPlus,
-  AlertTriangle
-} from 'lucide-react';
+  AlertTriangle,
+} from "lucide-react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 
-import { adminService } from '@/lib/api/admin';
+import { adminService } from "@/lib/api/admin";
 
 interface DashboardStats {
   overview: {
@@ -61,14 +67,18 @@ interface DashboardStats {
     firstName: string;
     lastName: string;
     email: string;
-    stats: { projectsCount: number; documentsCount: number; storageUsed: number };
+    stats: {
+      projectsCount: number;
+      documentsCount: number;
+      storageUsed: number;
+    };
     subscription: { plan: string };
   }>;
 }
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [timeframe, setTimeframe] = useState('30d');
+  const [timeframe, setTimeframe] = useState("30d");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,42 +90,45 @@ export default function AdminDashboardPage() {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await adminService.getDashboardStats();
-      
+
       if (response.success && response.data) {
         setStats(response.data);
       } else {
-        throw new Error(response.error || 'Failed to load dashboard stats');
+        throw new Error(response.error || "Failed to load dashboard stats");
       }
     } catch (error: any) {
-      setError(error.message || 'Failed to load dashboard');
+      setError(error.message || "Failed to load dashboard");
     } finally {
       setLoading(false);
     }
   };
 
   const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
+    if (bytes === 0) return "0 B";
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
   };
 
   const getPlanBadgeColor = (plan: string) => {
     switch (plan) {
-      case 'premium': return 'bg-purple-100 text-purple-800';
-      case 'basic': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case "premium":
+        return "bg-purple-100 text-purple-800";
+      case "basic":
+        return "bg-blue-100 text-blue-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
@@ -132,7 +145,9 @@ export default function AdminDashboardPage() {
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
           <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Dashboard</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">
+            Error Loading Dashboard
+          </h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <Button onClick={loadDashboardStats}>Try Again</Button>
         </div>
@@ -142,9 +157,12 @@ export default function AdminDashboardPage() {
 
   if (!stats) return null;
 
-  const activeUserPercentage = stats.overview.totalUsers > 0 
-    ? Math.round((stats.overview.activeUsers / stats.overview.totalUsers) * 100)
-    : 0;
+  const activeUserPercentage =
+    stats.overview.totalUsers > 0
+      ? Math.round(
+          (stats.overview.activeUsers / stats.overview.totalUsers) * 100
+        )
+      : 0;
 
   return (
     <div className="space-y-6 p-6">
@@ -152,9 +170,11 @@ export default function AdminDashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-gray-600">Overview of system usage and user activity</p>
+          <p className="text-gray-600">
+            Overview of system usage and user activity
+          </p>
         </div>
-        
+
         <div className="flex items-center space-x-3">
           <Select value={timeframe} onValueChange={setTimeframe}>
             <SelectTrigger className="w-40">
@@ -167,7 +187,7 @@ export default function AdminDashboardPage() {
               <SelectItem value="1y">Last year</SelectItem>
             </SelectContent>
           </Select>
-          
+
           <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
             Export Report
@@ -183,7 +203,9 @@ export default function AdminDashboardPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.overview.totalUsers}</div>
+            <div className="text-2xl font-bold">
+              {stats.overview.totalUsers}
+            </div>
             <p className="text-xs text-muted-foreground">
               {stats.overview.activeUsers} active ({activeUserPercentage}%)
             </p>
@@ -196,7 +218,9 @@ export default function AdminDashboardPage() {
             <FolderOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.overview.totalProjects}</div>
+            <div className="text-2xl font-bold">
+              {stats.overview.totalProjects}
+            </div>
             <p className="text-xs text-muted-foreground">
               Active projects across all users
             </p>
@@ -209,7 +233,9 @@ export default function AdminDashboardPage() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.overview.totalDocuments}</div>
+            <div className="text-2xl font-bold">
+              {stats.overview.totalDocuments}
+            </div>
             <p className="text-xs text-muted-foreground">
               Total uploaded documents
             </p>
@@ -222,7 +248,9 @@ export default function AdminDashboardPage() {
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatFileSize(stats.storage.total)}</div>
+            <div className="text-2xl font-bold">
+              {formatFileSize(stats.storage.total)}
+            </div>
             <p className="text-xs text-muted-foreground">
               Avg: {formatFileSize(stats.storage.average)} per user
             </p>
@@ -235,7 +263,9 @@ export default function AdminDashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Subscription Distribution</CardTitle>
-            <CardDescription>Current plan distribution across users</CardDescription>
+            <CardDescription>
+              Current plan distribution across users
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -245,35 +275,56 @@ export default function AdminDashboardPage() {
                   <span className="text-sm">Free</span>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-medium">{stats.subscriptions.free || 0}</div>
+                  <div className="text-sm font-medium">
+                    {stats.subscriptions.free || 0}
+                  </div>
                   <div className="text-xs text-gray-500">
-                    {Math.round(((stats.subscriptions.free || 0) / stats.overview.totalUsers) * 100)}%
+                    {Math.round(
+                      ((stats.subscriptions.free || 0) /
+                        stats.overview.totalUsers) *
+                        100
+                    )}
+                    %
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
                   <span className="text-sm">Basic</span>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-medium">{stats.subscriptions.basic || 0}</div>
+                  <div className="text-sm font-medium">
+                    {stats.subscriptions.basic || 0}
+                  </div>
                   <div className="text-xs text-gray-500">
-                    {Math.round(((stats.subscriptions.basic || 0) / stats.overview.totalUsers) * 100)}%
+                    {Math.round(
+                      ((stats.subscriptions.basic || 0) /
+                        stats.overview.totalUsers) *
+                        100
+                    )}
+                    %
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
                   <span className="text-sm">Premium</span>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-medium">{stats.subscriptions.premium || 0}</div>
+                  <div className="text-sm font-medium">
+                    {stats.subscriptions.premium || 0}
+                  </div>
                   <div className="text-xs text-gray-500">
-                    {Math.round(((stats.subscriptions.premium || 0) / stats.overview.totalUsers) * 100)}%
+                    {Math.round(
+                      ((stats.subscriptions.premium || 0) /
+                        stats.overview.totalUsers) *
+                        100
+                    )}
+                    %
                   </div>
                 </div>
               </div>
@@ -289,11 +340,15 @@ export default function AdminDashboardPage() {
           <CardContent>
             <div className="space-y-4">
               {stats.recentUsers.slice(0, 5).map((user) => (
-                <div key={user._id} className="flex items-center justify-between">
+                <div
+                  key={user._id}
+                  className="flex items-center justify-between"
+                >
                   <div className="flex items-center space-x-3">
                     <div className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center">
                       <span className="text-xs font-medium">
-                        {user.firstName[0]}{user.lastName[0]}
+                        {user.firstName[0]}
+                        {user.lastName[0]}
                       </span>
                     </div>
                     <div>
@@ -304,9 +359,11 @@ export default function AdminDashboardPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <Badge 
-                      variant="secondary" 
-                      className={`text-xs ${getPlanBadgeColor(user.subscription.plan)}`}
+                    <Badge
+                      variant="secondary"
+                      className={`text-xs ${getPlanBadgeColor(
+                        user.subscription.plan
+                      )}`}
                     >
                       {user.subscription.plan}
                     </Badge>
@@ -325,26 +382,31 @@ export default function AdminDashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>Top Users by Activity</CardTitle>
-          <CardDescription>Users with the most projects and documents</CardDescription>
+          <CardDescription>
+            Users with the most projects and documents
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             {stats.topUsers.map((user, index) => (
-              <div key={user._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div
+                key={user._id}
+                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+              >
                 <div className="flex items-center space-x-4">
                   <div className="flex-shrink-0">
                     <div className="h-10 w-10 bg-gray-200 rounded-full flex items-center justify-center">
-                      <span className="text-sm font-medium">
-                        #{index + 1}
-                      </span>
+                      <span className="text-sm font-medium">#{index + 1}</span>
                     </div>
                   </div>
                   <div>
-                    <p className="font-medium">{user.firstName} {user.lastName}</p>
+                    <p className="font-medium">
+                      {user.firstName} {user.lastName}
+                    </p>
                     <p className="text-sm text-gray-600">{user.email}</p>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center space-x-6 text-sm">
                   <div className="text-center">
                     <p className="font-medium">{user.stats.projectsCount}</p>
@@ -355,10 +417,12 @@ export default function AdminDashboardPage() {
                     <p className="text-gray-500">Documents</p>
                   </div>
                   <div className="text-center">
-                    <p className="font-medium">{formatFileSize(user.stats.storageUsed)}</p>
+                    <p className="font-medium">
+                      {formatFileSize(user.stats.storageUsed)}
+                    </p>
                     <p className="text-gray-500">Storage</p>
                   </div>
-                  <Badge 
+                  <Badge
                     variant="secondary"
                     className={getPlanBadgeColor(user.subscription.plan)}
                   >
@@ -383,13 +447,41 @@ export default function AdminDashboardPage() {
               <UserPlus className="h-6 w-6" />
               <span>Manage Users</span>
             </Button>
-            
-            <Button variant="outline" className="h-20 flex flex-col items-center space-y-2">
+
+            <Button
+              variant="outline"
+              className="h-20 flex flex-col items-center space-y-2"
+            >
               <TrendingUp className="h-6 w-6" />
               <span>View Analytics</span>
             </Button>
-            
-            <Button variant="outline" className="h-20 flex flex-col items-center space-y-2">
+
+            <Button
+              variant="outline"
+              className="h-20 flex flex-col items-center space-y-2"
+              onClick={() => {
+                // Quick export of admin data
+                const data = {
+                  users: stats.recentUsers,
+                  overview: stats.overview,
+                  subscriptions: stats.subscriptions,
+                  storage: stats.storage,
+                };
+                const blob = new Blob([JSON.stringify(data, null, 2)], {
+                  type: "application/json",
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `admin_dashboard_${
+                  new Date().toISOString().split("T")[0]
+                }.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }}
+            >
               <Download className="h-6 w-6" />
               <span>Export Data</span>
             </Button>

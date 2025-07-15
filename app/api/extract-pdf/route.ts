@@ -43,6 +43,7 @@ async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
     
     console.log(`📄 Processing PDF buffer: ${pdfBuffer.length} bytes`);
     
+    
     // Parse PDF with options
     const data = await pdfParse(pdfBuffer, {
       // Options to ensure proper parsing

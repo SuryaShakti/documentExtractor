@@ -286,13 +286,13 @@ const projectSchema = new mongoose.Schema({
         ['filename', {
           id: 'filename',
           field: 'filename',
-          headerName: 'Document Bundle',
+          headerName: 'Document Collection',
           width: 320,
           pinned: 'left',
           cellStyle: {
             borderRight: '1px solid #e5e7eb'
           },
-          cellRenderer: 'documentBundleRenderer'
+          cellRenderer: 'documentCollectionRenderer'
         }]
       ])
     }

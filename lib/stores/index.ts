@@ -20,22 +20,36 @@ export {
   useDocumentActions 
 } from './documentStore';
 
-// Combined selectors for common use cases (projects and documents only)
+// Collection Store
+export { default as useCollectionStore } from './collectionStore';
+export { 
+  useCollections, 
+  useCurrentCollection, 
+  useCollectionLoading, 
+  useCollectionError, 
+  useCollectionActions,
+  useExtractionStates 
+} from './collectionStore';
+
+// Combined selectors for common use cases
 export const useAppState = () => ({
   projects: useProjects(),
   activeProject: useActiveProject(),
-  documents: useDocuments()
+  documents: useDocuments(),
+  collections: useCollections()
 });
 
-// Combined loading states (projects and documents only)
+// Combined loading states
 export const useAppLoading = () => ({
   projects: useProjectLoading(),
   documents: useDocumentLoading(),
+  collections: useCollectionLoading(),
   uploading: useDocumentUploading()
 });
 
-// Combined error states (projects and documents only)
+// Combined error states
 export const useAppErrors = () => ({
   projects: useProjectError(),
-  documents: useDocumentError()
+  documents: useDocumentError(),
+  collections: useCollectionError()
 });
