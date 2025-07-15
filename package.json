@@ -9,7 +9,11 @@
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "type-check": "tsc --noEmit",
-    "cleanup": "node cleanup.js"
+    "cleanup": "node cleanup.js",
+    "test:db": "node test-db-connection.js",
+    "db:connect": "node test-db-connection.js",
+    "clear-cache": "rm -rf .next && npm cache clean --force",
+    "dev:fresh": "npm run clear-cache && npm run dev"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

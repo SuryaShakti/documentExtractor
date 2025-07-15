@@ -129,8 +129,73 @@ export interface UploadProgress {
 }
 
 class DocumentService {
-  async getDocuments(projectId: string, params?: DocumentQueryParams): Promise<ApiResponse<PaginatedResponse<any>>> {
-    return apiClient.get<PaginatedResponse<any>>(`/projects/${projectId}/documents`, params);
+  // Updated to call the collections API instead of documents API
+  async getDocuments(projectId: string, params?: DocumentQueryParams): Promise<ApiResponse<any>> {
+    // Call the collections API to get collections
+    const queryParams = new URLSearchParams();
+    queryParams.append('projectId', projectId);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+    if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+    
+    const response = await fetch(`/api/document-collections?${queryParams}`);
+    const result = await response.json();
+    
+    if (result.success) {
+      // Transform collections to look like documents for backward compatibility
+      const rowData = result.data.collections.map((collection: any) => {
+        const primaryDoc = collection.documents[0];
+        
+        // Safely handle MongoDB Map for extractedData
+        let extractedDataObj = {};
+        if (collection.extractedData) {
+          try {
+            // Handle different Map formats from MongoDB
+            if (collection.extractedData instanceof Map) {
+              extractedDataObj = Object.fromEntries(collection.extractedData);
+            } else if (typeof collection.extractedData === 'object' && collection.extractedData !== null) {
+              // If it's already a plain object, use it directly
+              extractedDataObj = collection.extractedData;
+            }
+          } catch (error) {
+            console.warn('Failed to process extractedData:', error);
+            extractedDataObj = {};
+          }
+        }
+        
+        return {
+          id: collection._id,
+          filename: collection.name,
+          originalName: collection.name,
+          uploadDate: new Date(collection.createdAt).toISOString().split('T')[0],
+          fileType: primaryDoc?.fileMetadata?.mimeType || 'collection',
+          fileUrl: primaryDoc?.cloudinary?.secureUrl || '#',
+          size: collection.stats.totalSize,
+          status: primaryDoc?.processing?.status || 'completed',
+          uploader: primaryDoc?.uploaderId,
+          documents: collection.documents, // Include full documents array
+          documentCount: collection.stats.documentCount,
+          hiddenDocuments: collection.settings.hiddenDocuments || [],
+          settings: collection.settings,
+          stats: collection.stats,
+          // Include extracted data from collection (safely converted)
+          ...extractedDataObj
+        };
+      });
+      
+      return {
+        success: true,
+        data: {
+          rowData,
+          pagination: result.data.pagination
+        }
+      };
+    }
+    
+    return result;
   }
 
   async getDocument(projectId: string, documentId: string): Promise<ApiResponse<Document>> {

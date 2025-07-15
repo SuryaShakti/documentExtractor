@@ -46,12 +46,14 @@ import {
 } from "@/components/ui/tooltip";
 import { ColumnSettings } from "@/components/table/column-settings";
 import { ExportDialog } from "./ExportDialog";
+import { DocumentCollectionModal } from "./DocumentCollectionModal";
 
 import {
   useDocuments,
   useDocumentActions,
   useActiveProject,
   useProjectActions,
+  useCollectionActions,
 } from "@/lib/stores";
 import { useToast } from "@/hooks/use-toast";
 import { UpdateColumnData } from "@/lib/api/projects";
@@ -61,8 +63,8 @@ interface DocumentGridProps {
   searchTerm?: string;
 }
 
-// Custom cell renderers
-const DocumentBundleRenderer = ({ data }: any) => {
+// Custom cell renderers  
+const DocumentCollectionRenderer = ({ data }: any) => {
   const getFileIcon = (mimeType: string) => {
     if (mimeType?.includes("pdf")) return "📄";
     if (mimeType?.includes("word")) return "📝";
@@ -93,10 +95,23 @@ const DocumentBundleRenderer = ({ data }: any) => {
   };
 
   return (
-    <div className="flex items-center space-x-3 py-2">
+    <div 
+      className="flex items-center space-x-3 py-2 cursor-pointer hover:bg-gray-50 rounded-md transition-colors" 
+      onClick={() => {
+        // This will be handled by the parent component to open the collection modal
+        if (data.onCollectionClick) {
+          data.onCollectionClick(data.id);
+        }
+      }}
+    >
       <div className="flex-shrink-0">
-        <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center text-lg">
-          {getFileIcon(data.fileType)}
+        <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center text-lg relative">
+          📁
+          {data.documentCount > 1 && (
+            <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+              {data.documentCount}
+            </span>
+          )}
         </div>
       </div>
       <div className="flex-1 min-w-0">
@@ -107,7 +122,10 @@ const DocumentBundleRenderer = ({ data }: any) => {
           {getStatusIcon(data.status)}
         </div>
         <div className="flex items-center space-x-3 text-xs text-gray-500">
+          <span>{data.documentCount} document{data.documentCount !== 1 ? 's' : ''}</span>
+          <span>•</span>
           <span>{formatFileSize(data.size)}</span>
+          <span>•</span>
           <span>{data.uploadDate}</span>
         </div>
       </div>
@@ -247,8 +265,8 @@ const ActionCellRenderer = (params: any) => {
     downloadDocument,
     processDocument,
     deleteDocument,
-    extractDataWithAI,
   } = useDocumentActions();
+  const { extractData, deleteCollection } = useCollectionActions();
   const { toast } = useToast();
   const activeProject = context?.activeProject;
 
@@ -344,12 +362,13 @@ const ActionCellRenderer = (params: any) => {
         description: "AI data extraction has been initiated. Please wait...",
       });
 
-      await extractDataWithAI(data.projectId, data.id);
+      // Extract data for the collection instead of individual document
+      await extractData(data.id);
       api.refreshCells();
 
       toast({
         title: "Extraction Completed",
-        description: "Data has been successfully extracted from the document.",
+        description: "Data has been successfully extracted from the collection.",
       });
     } catch (error: any) {
       console.error("Extraction failed:", error);
@@ -363,19 +382,19 @@ const ActionCellRenderer = (params: any) => {
   };
 
   const handleDelete = async () => {
-    if (confirm("Are you sure you want to delete this document?")) {
+    if (confirm("Are you sure you want to delete this collection?")) {
       try {
-        await deleteDocument(data.projectId, data.id);
+        await deleteCollection(data.id);
         api.refreshCells();
         toast({
-          title: "Document Deleted",
-          description: "The document has been successfully deleted.",
+          title: "Collection Deleted",
+          description: "The collection has been successfully deleted.",
         });
       } catch (error) {
         console.error("Delete failed:", error);
         toast({
           title: "Delete Failed",
-          description: "Failed to delete the document. Please try again.",
+          description: "Failed to delete the collection. Please try again.",
           variant: "destructive",
         });
       }
@@ -404,7 +423,7 @@ const ActionCellRenderer = (params: any) => {
             </Button>
           </TooltipTrigger>
           <TooltipContent position="bottom" side="bottom" align="start">
-            Download document
+            Download collection
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -454,7 +473,7 @@ const ActionCellRenderer = (params: any) => {
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={() => window.open(data.fileUrl, "_blank")}>
             <ExternalLink className="mr-2 h-4 w-4" />
-            View Original
+            View Collection
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleExport}>
             <FileText className="mr-2 h-4 w-4" />
@@ -463,7 +482,7 @@ const ActionCellRenderer = (params: any) => {
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleDelete} className="text-red-600">
             <Trash2 className="mr-2 h-4 w-4" />
-            Delete
+            Delete Collection
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -476,8 +495,15 @@ export function DocumentGrid({
   searchTerm = "",
 }: DocumentGridProps) {
   const documents = useDocuments();
-  const { getDocuments, updateExtractedData } = useDocumentActions();
+  const { getDocuments, updateExtractedData, uploadDocuments } = useDocumentActions();
   const { updateColumn, deleteColumn } = useProjectActions();
+  const { 
+    updateCollection, 
+    addDocumentToCollection, 
+    removeDocumentFromCollection, 
+    toggleDocumentVisibility, 
+    reorderDocuments 
+  } = useCollectionActions();
   const activeProject = useActiveProject();
   const gridRef = useRef<AgGridReact>(null);
   const [loading, setLoading] = useState(true);
@@ -508,11 +534,32 @@ export function DocumentGrid({
     isOpen: false,
   });
 
+  // Collection modal state
+  const [collectionModal, setCollectionModal] = useState<{
+    isOpen: boolean;
+    collectionId?: string;
+  }>({
+    isOpen: false,
+  });
+
   // Handle document export
   const handleExportDocument = (documentId: string) => {
     setExportDialog({
       isOpen: true,
       documentId,
+    });
+  };
+
+  // Handle collection modal
+  const handleCollectionClick = (collectionId: string) => {
+    console.log('Collection clicked:', collectionId);
+    console.log('Available collections:', documents);
+    const collection = documents.find(doc => doc.id === collectionId);
+    console.log('Selected collection:', collection);
+    
+    setCollectionModal({
+      isOpen: true,
+      collectionId,
     });
   };
 
@@ -624,20 +671,21 @@ export function DocumentGrid({
     );
   };
 
-  // Load documents
+  // Load documents (now actually loads collections)
   useEffect(() => {
     const loadDocuments = async () => {
       try {
         setLoading(true);
         console.log(
-          "Loading documents for project:",
+          "Loading collections for project:",
           projectId,
           "with search term:",
           searchTerm
         );
+        // For now, we'll still use the documents API which has been updated to return collections
         await getDocuments(projectId, { search: searchTerm });
       } catch (error) {
-        console.error("Failed to load documents:", error);
+        console.error("Failed to load collections:", error);
       } finally {
         setLoading(false);
       }
@@ -672,7 +720,7 @@ export function DocumentGrid({
 
       // Custom renderers based on column type
       if (colDef.id === "filename") {
-        baseCol.cellRenderer = DocumentBundleRenderer;
+        baseCol.cellRenderer = DocumentCollectionRenderer;
         baseCol.width = 320;
       } else if (colDef.id === "index") {
         baseCol.width = 60;
@@ -696,6 +744,9 @@ export function DocumentGrid({
           },
         };
         baseCol.valueSetter = (params) => {
+          // For collections, we'll update the collection's extracted data
+          // This is a simplified approach - in a full implementation you might need
+          // to handle this differently based on your aggregation strategy
           updateExtractedData(projectId, params.data.id, colDef.id, {
             value: params.newValue,
           }).catch((error) => {
@@ -739,13 +790,14 @@ export function DocumentGrid({
     handleDataChipClick, // Add this as a dependency
   ]);
 
-  // Process row data to include projectId
+  // Process row data to include projectId and collection click handler
   const rowData = useMemo(() => {
     return documents.map((doc) => ({
       ...doc,
       projectId,
+      onCollectionClick: handleCollectionClick,
     }));
-  }, [documents, projectId]);
+  }, [documents, projectId, handleCollectionClick]);
 
   const onGridReady = useCallback((params: GridReadyEvent) => {
     params.api.sizeColumnsToFit();
@@ -810,8 +862,8 @@ export function DocumentGrid({
     noRowsOverlayComponent: () => (
       <div className="flex flex-col items-center justify-center h-full text-gray-500">
         <FileText className="h-12 w-12 mb-4" />
-        <p className="text-lg font-medium">No documents found</p>
-        <p className="text-sm">Upload documents to start extracting data</p>
+        <p className="text-lg font-medium">No collections found</p>
+        <p className="text-sm">Upload documents to start creating collections</p>
       </div>
     ),
   };
@@ -896,6 +948,57 @@ export function DocumentGrid({
           type="document"
         />
       )}
+
+      {/* Collection Modal */}
+      {collectionModal.isOpen && collectionModal.collectionId && (() => {
+        const collection = documents.find(doc => doc.id === collectionModal.collectionId);
+        return collection ? (
+          <DocumentCollectionModal
+            isOpen={collectionModal.isOpen}
+            onClose={() => setCollectionModal({ isOpen: false })}
+            collection={{
+              _id: collection.id,
+              name: collection.filename || collection.originalName,
+              documents: collection.documents || [],
+              documentCount: collection.documentCount || 0,
+              stats: collection.stats || {
+                totalSize: collection.size || 0,
+                lastModified: collection.uploadDate || new Date().toISOString()
+              },
+              settings: collection.settings || {
+                hiddenDocuments: collection.hiddenDocuments || []
+              }
+            } as any}
+            onUpdateCollection={updateCollection}
+            onAddDocument={async (collectionId, file) => {
+              // ✅ FIXED: Upload directly to the specific collection
+              try {
+                console.log(`Uploading file to collection ${collectionId}:`, file.name);
+                
+                // Import collection service dynamically
+                const { collectionService } = await import('@/lib/api/collections');
+                
+                // Upload to the specific collection
+                const result = await collectionService.uploadToCollection(collectionId, [file]);
+                
+                if (result.success) {
+                  console.log('Upload successful:', result.data);
+                  // Refresh the grid data to show updated collection
+                  await getDocuments(projectId, { search: searchTerm });
+                } else {
+                  throw new Error(result.error || 'Upload failed');
+                }
+              } catch (error: any) {
+                console.error('Collection upload failed:', error);
+                throw error; // Re-throw to be handled by the modal
+              }
+            }}
+            onRemoveDocument={removeDocumentFromCollection}
+            onToggleDocumentVisibility={toggleDocumentVisibility}
+            onReorderDocuments={reorderDocuments}
+          />
+        ) : null;
+      })()}
     </div>
   );
 }

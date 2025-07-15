@@ -3,6 +3,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import connectDB from "@/lib/database/mongodb";
 import Document from "@/lib/models/Document";
+import DocumentCollection from "@/lib/models/DocumentCollection";
 import Project from "@/lib/models/Project";
 
 // Types for the document grid schema (maintaining backward compatibility)
@@ -68,6 +69,8 @@ export interface DocumentGridSchema {
     uploadDate: string;
     fileType: string;
     fileUrl: string;
+    documents: any[];
+    documentCount: number;
     [key: string]: any;
   }>;
 }
@@ -123,13 +126,13 @@ async function readDataFromFile(): Promise<DocumentGridSchema> {
         },
         filename: {
           field: "filename",
-          headerName: "Document Bundle",
+          headerName: "Document Collection",
           width: 320,
           pinned: "left",
           cellStyle: {
             borderRight: "1px solid #e5e7eb",
           },
-          cellRenderer: "documentBundleRenderer",
+          cellRenderer: "documentCollectionRenderer",
         },
       },
       rowData: [],
@@ -166,22 +169,59 @@ async function getDocumentData(): Promise<DocumentGridSchema> {
     
     if (projects.length > 0) {
       const project = projects[0];
-      const documents = await Document.find({ projectId: project._id, status: { $ne: 'deleted' } })
-        .populate('uploaderId', 'firstName lastName email')
-        .sort({ createdAt: -1 });
+      console.log('Found project:', project.name, 'ID:', project._id);
+      
+      const collections = await DocumentCollection.find({ projectId: project._id, status: { $ne: 'deleted' } })
+        .populate({
+          path: 'documents',
+          populate: {
+            path: 'uploaderId',
+            select: 'firstName lastName email'
+          }
+        })
+        .sort({ order: 1 });
+
+      console.log('Found', collections.length, 'collections for project');
 
       // Convert to grid format
-      const rowData = documents.map(doc => ({
-        id: doc._id.toString(),
-        filename: doc.filename,
-        originalName: doc.originalName,
-        uploadDate: doc.createdAt.toISOString().split('T')[0],
-        fileType: doc.fileMetadata.mimeType,
-        fileUrl: doc.cloudinary.secureUrl,
-        size: doc.fileMetadata.size,
-        status: doc.processing.status,
-        uploader: doc.uploaderId
-      }));
+      const rowData = collections.map(collection => {
+        const primaryDoc = collection.documents[0];
+        console.log('Processing collection:', collection.name, 'with documents:', collection.documents.length);
+        
+        // Safely handle MongoDB Map for extractedData
+        let extractedDataObj = {};
+        if (collection.extractedData) {
+          try {
+            // Handle different Map formats from MongoDB
+            if (collection.extractedData instanceof Map) {
+              extractedDataObj = Object.fromEntries(collection.extractedData);
+            } else if (typeof collection.extractedData === 'object' && collection.extractedData !== null) {
+              // If it's already a plain object, use it directly
+              extractedDataObj = collection.extractedData;
+            }
+          } catch (error) {
+            console.warn('Failed to process extractedData for collection', collection.name, ':', error);
+            extractedDataObj = {};
+          }
+        }
+        
+        return {
+          id: collection._id.toString(),
+          filename: collection.name,
+          originalName: collection.name,
+          uploadDate: collection.createdAt.toISOString().split('T')[0],
+          fileType: primaryDoc?.fileMetadata?.mimeType || 'collection',
+          fileUrl: primaryDoc?.cloudinary?.secureUrl || '#',
+          size: collection.stats.totalSize,
+          status: primaryDoc?.processing?.status || 'completed',
+          uploader: primaryDoc?.uploaderId,
+          documents: collection.documents, // Make sure this is included
+          documentCount: collection.stats.documentCount,
+          hiddenDocuments: collection.settings.hiddenDocuments || [],
+          // Include extracted data from collection (safely converted)
+          ...extractedDataObj
+        };
+      });
 
       // Convert project grid configuration
       const columnDefs: any = {};
@@ -193,10 +233,10 @@ async function getDocumentData(): Promise<DocumentGridSchema> {
 
       return {
         meta: {
-          totalRows: documents.length,
+          totalRows: collections.length,
           totalCols: Object.keys(columnDefs).length || 2,
           lastUpdated: new Date().toISOString(),
-          version: "2.0"
+          version: "3.0"
         },
         gridOptions: project.gridConfiguration?.gridOptions || {
           domLayout: "normal",
@@ -246,11 +286,18 @@ export async function GET() {
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     const data = await getDocumentData();
-    return NextResponse.json(data);
+    
+    // Add cache headers to prevent caching during development
+    const response = NextResponse.json(data);
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+    
+    return response;
   } catch (error) {
     console.error("Error fetching document data:", error);
     return NextResponse.json(
-      { error: "Failed to fetch document data" },
+      { error: "Failed to fetch document data", details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
@@ -261,36 +308,11 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     if (body.action === "addDocument") {
-      // Handle legacy add document action
-      const data = await getDocumentData();
-      
-      const newDocument = {
-        id: `doc-${Date.now()}`,
-        filename: body.filename,
-        uploadDate: new Date().toISOString().split("T")[0],
-        fileType: body.fileType,
-        fileUrl: body.fileUrl || "#",
-      };
-
-      // Add empty data for all existing columns
-      Object.keys(data.columnDefs).forEach((colKey) => {
-        if (colKey !== "index" && colKey !== "filename") {
-          (newDocument as any)[colKey] = {
-            value: "",
-            type: data.columnDefs[colKey].customProperties?.type || "text",
-            status: null,
-            confidence: 0,
-            extractedAt: new Date().toISOString(),
-          };
-        }
-      });
-
-      data.rowData.push(newDocument);
-      data.meta.totalRows = data.rowData.length;
-      data.meta.lastUpdated = new Date().toISOString();
-
-      await writeDataToFile(data);
-      return NextResponse.json({ success: true, document: newDocument });
+      // This action is now handled by the upload API which creates collections automatically
+      return NextResponse.json({ 
+        success: false, 
+        error: "Use the upload API to add documents. Each document will automatically create a collection." 
+      }, { status: 400 });
     }
 
     if (body.action === "addColumn") {
