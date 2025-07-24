@@ -102,25 +102,25 @@ export function DocumentCollectionModal({
   onToggleDocumentVisibility,
   onReorderDocuments,
 }: DocumentCollectionModalProps) {
-  const [collectionName, setCollectionName] = useState(collection.name);
+  const [collectionName, setCollectionName] = useState(collection?.name || "");
   const [isEditing, setIsEditing] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   // Debug logging
-  console.log('DocumentCollectionModal received collection:', collection);
-  console.log('Collection documents:', collection.documents);
-  console.log('Documents length:', collection.documents?.length);
-  
+  console.log("DocumentCollectionModal received collection:", collection);
+  console.log("Collection documents:", collection?.documents || []);
+  console.log("Documents length:", collection?.documents?.length);
+
   // Add safety check for collection data
   if (!collection) {
-    console.error('DocumentCollectionModal: No collection data provided');
+    console.error("DocumentCollectionModal: No collection data provided");
     return null;
   }
-  
+
   // Ensure documents array exists
-  const documents = collection.documents || [];
-  console.log('Processed documents:', documents);
+  const documents = collection?.documents || [];
+  console.log("Processed documents:", documents);
 
   const getFileIcon = (mimeType: string): string => {
     if (mimeType?.includes("pdf")) return "📄";
@@ -153,7 +153,7 @@ export function DocumentCollectionModal({
 
   const handleSaveName = async (): Promise<void> => {
     try {
-      await onUpdateCollection(collection._id, { name: collectionName });
+      await onUpdateCollection(collection?._id, { name: collectionName });
       setIsEditing(false);
     } catch (error) {
       console.error("Failed to update collection name:", error);
@@ -168,29 +168,38 @@ export function DocumentCollectionModal({
 
     setIsUploading(true);
     const fileArray = Array.from(files);
-    
+
     try {
-      console.log(`Uploading ${fileArray.length} file(s) to collection:`, collection.name);
-      
+      console.log(
+        `Uploading ${fileArray.length} file(s) to collection:`,
+        collection?.name
+      );
+
       // Upload files one by one to provide better error handling
       for (let i = 0; i < fileArray.length; i++) {
         const file = fileArray[i];
-        console.log(`Uploading file ${i + 1}/${fileArray.length}: ${file.name}`);
-        
+        console.log(
+          `Uploading file ${i + 1}/${fileArray.length}: ${file.name}`
+        );
+
         try {
-          await onAddDocument(collection._id, file);
+          await onAddDocument(collection?._id, file);
           console.log(`Successfully uploaded: ${file.name}`);
         } catch (fileError: any) {
           console.error(`Failed to upload ${file.name}:`, fileError);
           // Continue with other files even if one fails
-          alert(`Failed to upload ${file.name}: ${fileError.message || 'Unknown error'}`);
+          alert(
+            `Failed to upload ${file.name}: ${
+              fileError.message || "Unknown error"
+            }`
+          );
         }
       }
-      
-      console.log('All upload attempts completed');
+
+      console.log("All upload attempts completed");
     } catch (error: any) {
       console.error("Upload process failed:", error);
-      alert(`Upload failed: ${error.message || 'Unknown error'}`);
+      alert(`Upload failed: ${error.message || "Unknown error"}`);
     } finally {
       setIsUploading(false);
       event.target.value = ""; // Reset input
@@ -202,7 +211,7 @@ export function DocumentCollectionModal({
     isHidden: boolean
   ): Promise<void> => {
     try {
-      await onToggleDocumentVisibility(collection._id, documentId, !isHidden);
+      await onToggleDocumentVisibility(collection?._id, documentId, !isHidden);
     } catch (error) {
       console.error("Failed to toggle document visibility:", error);
     }
@@ -215,7 +224,7 @@ export function DocumentCollectionModal({
       )
     ) {
       try {
-        await onRemoveDocument(collection._id, documentId);
+        await onRemoveDocument(collection?._id, documentId);
       } catch (error) {
         console.error("Failed to remove document:", error);
       }
@@ -223,7 +232,7 @@ export function DocumentCollectionModal({
   };
 
   const isDocumentHidden = (documentId: string): boolean => {
-    return collection.settings.hiddenDocuments.includes(documentId);
+    return collection?.settings.hiddenDocuments.includes(documentId);
   };
 
   return (
@@ -247,7 +256,7 @@ export function DocumentCollectionModal({
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      setCollectionName(collection.name);
+                      setCollectionName(collection?.name);
                       setIsEditing(false);
                     }}
                   >
@@ -257,7 +266,7 @@ export function DocumentCollectionModal({
               ) : (
                 <div className="flex items-center space-x-2">
                   <DialogTitle className="text-xl">
-                    {collection.name}
+                    {collection?.name}
                   </DialogTitle>
                   <Button
                     size="sm"
@@ -270,8 +279,8 @@ export function DocumentCollectionModal({
               )}
             </div>
             <Badge variant="secondary">
-              {collection.documentCount} document
-              {collection.documentCount !== 1 ? "s" : ""}
+              {collection?.documentCount} document
+              {collection?.documentCount !== 1 ? "s" : ""}
             </Badge>
           </div>
         </DialogHeader>
@@ -279,28 +288,38 @@ export function DocumentCollectionModal({
         <div className="flex-1 overflow-auto">
           <div className="space-y-4">
             {/* Upload Section */}
-            <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-              isUploading 
-                ? 'border-blue-400 bg-blue-50' 
-                : 'border-gray-300 hover:border-gray-400'
-            }`}>
+            <div
+              className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                isUploading
+                  ? "border-blue-400 bg-blue-50"
+                  : "border-gray-300 hover:border-gray-400"
+              }`}
+            >
               <div className="flex flex-col items-center space-y-3">
-                <Upload className={`h-8 w-8 ${
-                  isUploading ? 'text-blue-500 animate-pulse' : 'text-gray-400'
-                }`} />
+                <Upload
+                  className={`h-8 w-8 ${
+                    isUploading
+                      ? "text-blue-500 animate-pulse"
+                      : "text-gray-400"
+                  }`}
+                />
                 <div>
-                  <label htmlFor="document-upload" className={`cursor-pointer ${
-                    isUploading ? 'pointer-events-none' : ''
-                  }`}>
-                    <span className={`text-sm font-medium ${
-                      isUploading 
-                        ? 'text-blue-700' 
-                        : 'text-blue-600 hover:text-blue-500'
-                    }`}>
-                      {isUploading 
-                        ? "Uploading to collection..." 
-                        : "Add more documents to this collection"
-                      }
+                  <label
+                    htmlFor="document-upload"
+                    className={`cursor-pointer ${
+                      isUploading ? "pointer-events-none" : ""
+                    }`}
+                  >
+                    <span
+                      className={`text-sm font-medium ${
+                        isUploading
+                          ? "text-blue-700"
+                          : "text-blue-600 hover:text-blue-500"
+                      }`}
+                    >
+                      {isUploading
+                        ? "Uploading to collection?..."
+                        : "Add more documents to this collection"}
                     </span>
                     <input
                       id="document-upload"
@@ -313,10 +332,9 @@ export function DocumentCollectionModal({
                     />
                   </label>
                   <p className="text-xs text-gray-500 mt-1">
-                    {isUploading 
-                      ? 'Please wait while files are being added to this collection...'
-                      : 'PDF, DOC, DOCX, TXT, CSV, JPG, JPEG, PNG'
-                    }
+                    {isUploading
+                      ? "Please wait while files are being added to this collection?..."
+                      : "PDF, DOC, DOCX, TXT, CSV, JPG, JPEG, PNG"}
                   </p>
                 </div>
               </div>
@@ -329,7 +347,8 @@ export function DocumentCollectionModal({
                   Documents in Collection
                 </h4>
                 <div className="text-sm text-gray-500">
-                  Total size: {formatFileSize(collection?.stats?.totalSize || 0)}
+                  Total size:{" "}
+                  {formatFileSize(collection?.stats?.totalSize || 0)}
                 </div>
               </div>
 
@@ -343,10 +362,14 @@ export function DocumentCollectionModal({
                   {documents.map((doc, index) => {
                     // Safety check for document data
                     if (!doc || !doc._id) {
-                      console.warn('DocumentCollectionModal: Invalid document data at index', index, doc);
+                      console.warn(
+                        "DocumentCollectionModal: Invalid document data at index",
+                        index,
+                        doc
+                      );
                       return null;
                     }
-                    
+
                     const isHidden = isDocumentHidden(doc._id);
                     return (
                       <div
@@ -361,16 +384,18 @@ export function DocumentCollectionModal({
 
                         <div className="flex-shrink-0">
                           <div className="h-8 w-8 bg-gray-100 rounded flex items-center justify-center text-sm">
-                            {getFileIcon(doc?.fileMetadata?.mimeType || '')}
+                            {getFileIcon(doc?.fileMetadata?.mimeType || "")}
                           </div>
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-2">
                             <p className="text-sm font-medium text-gray-900 truncate">
-                              {doc?.originalName || 'Unknown Document'}
+                              {doc?.originalName || "Unknown Document"}
                             </p>
-                            {getStatusIcon(doc?.processing?.status || 'pending')}
+                            {getStatusIcon(
+                              doc?.processing?.status || "pending"
+                            )}
                             {isHidden && (
                               <Badge variant="outline" className="text-xs">
                                 Hidden
@@ -378,13 +403,15 @@ export function DocumentCollectionModal({
                             )}
                           </div>
                           <div className="flex items-center space-x-3 text-xs text-gray-500">
-                            <span>{formatFileSize(doc?.fileMetadata?.size || 0)}</span>
+                            <span>
+                              {formatFileSize(doc?.fileMetadata?.size || 0)}
+                            </span>
                             <span>•</span>
                             <span>
-                              {doc.uploaderId?.firstName && doc.uploaderId?.lastName 
+                              {doc.uploaderId?.firstName &&
+                              doc.uploaderId?.lastName
                                 ? `${doc.uploaderId.firstName} ${doc.uploaderId.lastName}`
-                                : "Unknown User"
-                              }
+                                : "Unknown User"}
                             </span>
                             <span>•</span>
                             <span>

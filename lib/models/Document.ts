@@ -22,6 +22,22 @@ export interface IExtractedData {
     pageNumber?: number;
     rawText?: string;
   };
+  // NEW: Cell-level customization (additive enhancement)
+  cellCustomization?: {
+    isCustomized: boolean;
+    customPrompt?: string;
+    originalPrompt?: string;
+    customizedAt?: Date;
+    customizedBy?: mongoose.Types.ObjectId;
+    extractionHistory?: Array<{
+      prompt: string;
+      result: string;
+      confidence: number;
+      timestamp: Date;
+      model?: string;
+    }>;
+    notes?: string;
+  };
 }
 
 export interface IDocument extends mongoose.Document {
@@ -107,6 +123,13 @@ export interface IDocument extends mongoose.Document {
   updateProcessingStatus(status: string, progress?: number | null, error?: any): Promise<IDocument>;
   addAuditLog(action: string, userId: mongoose.Types.ObjectId, details?: any, req?: any): Promise<IDocument>;
   incrementAnalytics(type: 'view' | 'download' | 'share'): Promise<IDocument>;
+  // NEW: Cell-level extraction methods
+  setCellCustomPrompt(columnId: string, customPrompt: string, userId: mongoose.Types.ObjectId, originalPrompt?: string): Promise<IDocument>;
+  removeCellCustomization(columnId: string): Promise<IDocument>;
+  getEffectivePrompt(columnId: string, defaultPrompt: string): string;
+  isCellCustomized(columnId: string): boolean;
+  addExtractionHistory(columnId: string, prompt: string, result: string, confidence: number, model?: string): Promise<IDocument>;
+  getCustomizedCells(): { [columnId: string]: any };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -158,6 +181,28 @@ const extractedDataSchema = new mongoose.Schema({
     },
     pageNumber: Number,
     rawText: String
+  },
+  // NEW: Cell-level customization schema (additive)
+  cellCustomization: {
+    isCustomized: {
+      type: Boolean,
+      default: false
+    },
+    customPrompt: String,
+    originalPrompt: String,
+    customizedAt: Date,
+    customizedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    extractionHistory: [{
+      prompt: { type: String, required: true },
+      result: { type: String, required: true },
+      confidence: { type: Number, min: 0, max: 1 },
+      timestamp: { type: Date, default: Date.now },
+      model: String
+    }],
+    notes: String
   }
 }, { _id: false });
 
@@ -447,6 +492,122 @@ documentSchema.methods.incrementAnalytics = function(this: IDocument, type: 'vie
   }
   
   return this.save();
+};
+
+// NEW: Cell-level extraction methods (additive enhancement)
+
+// Method to customize cell-level prompt
+documentSchema.methods.setCellCustomPrompt = function(this: IDocument, columnId: string, customPrompt: string, userId: mongoose.Types.ObjectId, originalPrompt?: string) {
+  const currentData = this.extractedData.get(columnId) || {
+    value: '',
+    type: 'text',
+    status: null,
+    confidence: 0,
+    extractedAt: new Date(),
+    extractedBy: { method: 'ai' }
+  };
+
+  // Initialize or update cell customization
+  const cellCustomization = {
+    isCustomized: true,
+    customPrompt,
+    originalPrompt: originalPrompt || currentData.cellCustomization?.originalPrompt || '',
+    customizedAt: new Date(),
+    customizedBy: userId,
+    extractionHistory: currentData.cellCustomization?.extractionHistory || [],
+    notes: currentData.cellCustomization?.notes || ''
+  };
+
+  this.extractedData.set(columnId, {
+    ...currentData,
+    cellCustomization
+  });
+
+  this.markModified('extractedData');
+  return this.save();
+};
+
+// Method to remove cell customization (revert to column default)
+documentSchema.methods.removeCellCustomization = function(this: IDocument, columnId: string) {
+  const currentData = this.extractedData.get(columnId);
+  if (currentData && currentData.cellCustomization) {
+    currentData.cellCustomization.isCustomized = false;
+    currentData.cellCustomization.customPrompt = undefined;
+    
+    this.extractedData.set(columnId, currentData);
+    this.markModified('extractedData');
+  }
+  return this.save();
+};
+
+// Method to get effective prompt for a cell (custom or default)
+documentSchema.methods.getEffectivePrompt = function(this: IDocument, columnId: string, defaultPrompt: string) {
+  const extractedData = this.extractedData.get(columnId);
+  
+  if (extractedData?.cellCustomization?.isCustomized && extractedData.cellCustomization.customPrompt) {
+    return extractedData.cellCustomization.customPrompt;
+  }
+  
+  return defaultPrompt;
+};
+
+// Method to check if cell has custom prompt
+documentSchema.methods.isCellCustomized = function(this: IDocument, columnId: string) {
+  const extractedData = this.extractedData.get(columnId);
+  return extractedData?.cellCustomization?.isCustomized || false;
+};
+
+// Method to add extraction history entry
+documentSchema.methods.addExtractionHistory = function(this: IDocument, columnId: string, prompt: string, result: string, confidence: number, model?: string) {
+  const currentData = this.extractedData.get(columnId);
+  if (currentData) {
+    if (!currentData.cellCustomization) {
+      currentData.cellCustomization = {
+        isCustomized: false,
+        extractionHistory: []
+      };
+    }
+    
+    if (!currentData.cellCustomization.extractionHistory) {
+      currentData.cellCustomization.extractionHistory = [];
+    }
+    
+    currentData.cellCustomization.extractionHistory.push({
+      prompt,
+      result,
+      confidence,
+      timestamp: new Date(),
+      model
+    });
+    
+    // Keep only last 10 entries to avoid bloating
+    if (currentData.cellCustomization.extractionHistory.length > 10) {
+      currentData.cellCustomization.extractionHistory = currentData.cellCustomization.extractionHistory.slice(-10);
+    }
+    
+    this.extractedData.set(columnId, currentData);
+    this.markModified('extractedData');
+  }
+  return this.save();
+};
+
+// Method to get customized cells summary
+documentSchema.methods.getCustomizedCells = function(this: IDocument) {
+  const customizedCells: { [columnId: string]: any } = {};
+  
+  for (const [columnId, data] of this.extractedData) {
+    if (data.cellCustomization?.isCustomized) {
+      customizedCells[columnId] = {
+        customPrompt: data.cellCustomization.customPrompt,
+        originalPrompt: data.cellCustomization.originalPrompt,
+        customizedAt: data.cellCustomization.customizedAt,
+        customizedBy: data.cellCustomization.customizedBy,
+        historyCount: data.cellCustomization.extractionHistory?.length || 0
+      };
+    }
+  }
+  
+  return customizedCells;
 };
 
 // Static method to get documents by project with pagination

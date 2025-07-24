@@ -6,7 +6,6 @@ import {
   ColDef,
   GridReadyEvent,
   CellValueChangedEvent,
-  CellContextMenuEvent, // NEW: Added for cell customization
 } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
@@ -28,8 +27,6 @@ import {
   Brain,
   Settings,
   X,
-  Target, // NEW: Added for cell customization indicator
-  Edit3,  // NEW: Added for cell customization
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -50,7 +47,6 @@ import {
 import { ColumnSettings } from "@/components/table/column-settings";
 import { ExportDialog } from "./ExportDialog";
 import { DocumentCollectionModal } from "./DocumentCollectionModal";
-import { CellCustomizationDialog } from "./cell-customization/CellCustomizationDialog";
 
 import {
   useDocuments,
@@ -215,7 +211,6 @@ const DataChipDetailModal = ({
   );
 };
 
-// NEW: Enhanced DataChipRenderer with cell customization support
 const DataChipRenderer = ({ value, colDef, column, context, data }: any) => {
   const colId = column.getColId();
   const extractionStates = context?.extractionStates || new Map();
@@ -224,10 +219,6 @@ const DataChipRenderer = ({ value, colDef, column, context, data }: any) => {
   // Check if this specific column is being extracted
   const isExtracting = extractionState?.isExtracting && 
     (extractionState.extractingColumns.includes(colId) || extractionState.extractingColumns.length === 0);
-
-  // NEW: Check if cell has custom prompt
-  const extractedData = data.extractedData?.[colId];
-  const isCustomized = extractedData?.cellCustomization?.isCustomized || false;
 
   // Show shimmer during extraction
   if (isExtracting) {
@@ -280,21 +271,11 @@ const DataChipRenderer = ({ value, colDef, column, context, data }: any) => {
   return (
     <div className="flex items-center space-x-2 h-full">
       <div
-        className={`px-2 py-1 rounded text-white text-xs font-medium max-w-full truncate cursor-pointer hover:opacity-80 transition-opacity relative ${
-          isCustomized ? 'ring-2 ring-blue-400 ring-offset-1' : ''
-        }`}
+        className="px-2 py-1 rounded text-white text-xs font-medium max-w-full truncate cursor-pointer hover:opacity-80 transition-opacity"
         style={{ backgroundColor: bgColor }}
         onClick={handleChipClick}
-        title={isCustomized ? `Custom prompt used - ${value.value}` : value.value}
       >
         {value.value}
-        {/* NEW: Custom prompt indicator */}
-        {isCustomized && (
-          <Target 
-            className="absolute -top-1 -right-1 h-3 w-3 text-blue-600 bg-white rounded-full p-0.5" 
-            title="Cell has custom prompt" 
-          />
-        )}
       </div>
     </div>
   );
@@ -567,7 +548,6 @@ export function DocumentGrid({
   const extractionStates = useExtractionStates();
   const gridRef = useRef<AgGridReact>(null);
   const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
 
   // Column settings state
   const [activeColumnSettings, setActiveColumnSettings] = useState<
@@ -603,24 +583,6 @@ export function DocumentGrid({
     isOpen: false,
   });
 
-  // NEW: Cell customization state
-  const [cellCustomizationDialog, setCellCustomizationDialog] = useState<{
-    open: boolean;
-    projectId: string;
-    documentId: string;
-    columnId: string;
-    columnName: string;
-    documentName: string;
-    currentValue?: string;
-  }>({
-    open: false,
-    projectId: "",
-    documentId: "",
-    columnId: "",
-    columnName: "",
-    documentName: "",
-  });
-
   // Handle document export
   const handleExportDocument = (documentId: string) => {
     setExportDialog({
@@ -641,72 +603,6 @@ export function DocumentGrid({
       collectionId,
     });
   };
-
-  // NEW: Handle cell context menu (right-click) - Now opens the real dialog
-  const handleCellContextMenu = useCallback((params: any, columnId: string, columnName: string) => {
-    // Don't show context menu for system columns
-    if (columnId === "index" || columnId === "filename" || columnId === "actions") return;
-
-    const documentData = params.data;
-    if (!documentData) return;
-
-    console.log("Cell context menu triggered for:", { columnId, columnName, documentData: documentData.filename });
-    
-    // Open the full cell customization dialog
-    setCellCustomizationDialog({
-      open: true,
-      projectId,
-      documentId: documentData.id,
-      columnId,
-      columnName,
-      documentName: documentData.filename || documentData.originalName,
-      currentValue: documentData.extractedData?.[columnId]?.value || "",
-    });
-  }, [projectId]);
-
-  // NEW: Handle cell customization saved
-  const handleCellCustomizationSaved = useCallback(() => {
-    // Refresh documents to show updated customization
-    getDocuments(projectId);
-    toast({
-      title: "Customization Saved",
-      description: "Cell-level prompt has been saved successfully.",
-    });
-  }, [projectId, getDocuments, toast]);
-
-  // NEW: Quick extract single cell function
-  const handleQuickExtractCell = useCallback(async (documentId: string, columnId: string) => {
-    try {
-      const response = await fetch("/api/extract-cell", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({
-          projectId,
-          documentId,
-          columnId,
-        }),
-      });
-
-      if (response.ok) {
-        getDocuments(projectId); // Refresh to show new result
-        toast({
-          title: "Extraction Complete",
-          description: "Cell data has been extracted successfully.",
-        });
-      } else {
-        throw new Error("Extraction failed");
-      }
-    } catch (error) {
-      toast({
-        title: "Extraction Failed",
-        description: "Failed to extract cell data. Please try again.",
-        variant: "destructive",
-      });
-    }
-  }, [projectId, getDocuments, toast]);
 
   // Convert project column definitions to array format (similar to AgGridDocumentTable)
   const columns = useMemo(() => {
@@ -889,10 +785,6 @@ export function DocumentGrid({
             extractionStates,
           },
         };
-        // NEW: Add right-click context menu support for cell customization
-        baseCol.onCellContextMenu = (params: any) => {
-          handleCellContextMenu(params, colDef.id, colDef.headerName);
-        };
         baseCol.valueSetter = (params) => {
           // For collections, we'll update the collection's extracted data
           // This is a simplified approach - in a full implementation you might need
@@ -941,7 +833,6 @@ export function DocumentGrid({
     updateExtractedData,
     handleDataChipClick,
     extractionStates, // Add extraction states as dependency
-    handleCellContextMenu, // NEW: Add cell context menu handler as dependency
   ]);
 
   // Process row data to include projectId and collection click handler
@@ -1008,9 +899,6 @@ export function DocumentGrid({
     paginationPageSizeSelector: [10, 25, 50, 100],
     suppressPaginationPanel: false,
     suppressScrollOnNewData: true,
-    // NEW: Enable context menu for cell customization
-    allowContextMenuWithControlKey: true,
-    preventDefaultOnContextMenu: true,
     loadingOverlayComponent: () => (
       <div className="flex items-center justify-center h-full">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -1052,12 +940,6 @@ export function DocumentGrid({
           border-right: 2px solid #d1d5db !important;
         }
       `}</style>
-
-      {/* NEW: Help text for cell customization */}
-      <div className="px-4 py-2 bg-blue-50 border-b text-sm text-blue-700">
-        💡 <strong>Cell-Level AI:</strong> Right-click on any data cell to customize extraction prompts for that specific cell.
-        Cells with custom prompts show a blue ring and target indicator.
-      </div>
 
       <AgGridReact
         ref={gridRef}
@@ -1162,24 +1044,6 @@ export function DocumentGrid({
           />
         ) : null;
       })()}
-
-      {/* Cell Customization Dialog - Full Featured */}
-      <CellCustomizationDialog
-        open={cellCustomizationDialog.open}
-        onOpenChange={(open) => setCellCustomizationDialog(prev => ({ ...prev, open }))}
-        projectId={cellCustomizationDialog.projectId}
-        documentId={cellCustomizationDialog.documentId}
-        columnId={cellCustomizationDialog.columnId}
-        columnName={cellCustomizationDialog.columnName}
-        documentName={cellCustomizationDialog.documentName}
-        currentValue={cellCustomizationDialog.currentValue}
-        defaultPrompt={(() => {
-          // Get the default prompt from column configuration
-          const columnDef = activeProject?.gridConfiguration?.columnDefs?.[cellCustomizationDialog.columnId];
-          return columnDef?.customProperties?.prompt || `Extract ${cellCustomizationDialog.columnName} from the document`;
-        })()}
-        onCustomizationSaved={handleCellCustomizationSaved}
-      />
     </div>
   );
 }
