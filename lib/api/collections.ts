@@ -126,11 +126,56 @@ class CollectionService {
     visibleDocumentCount: number;
     columnsProcessed: number;
   }>> {
+    // DEPRECATED: This method doesn't have projectId, use extractDataWithProject instead
+    console.warn('⚠️  Using deprecated extractData method. Migrate to extractDataWithProject for proper functionality.');
+    
+    // Fallback to old API for backward compatibility
     return apiClient.post(`/document-collections/${collectionId}/extract`, {
       columnId,
       columns,
       forceReextract
     });
+  }
+
+  // NEW: Updated method that requires projectId (recommended)
+  async extractDataWithProject(projectId: string, collectionId: string, options?: {
+    columnId?: string;
+    columns?: string[];
+    forceReextract?: boolean;
+    aggregationStrategy?: 'concatenate' | 'summary' | 'list' | 'smart';
+  }): Promise<ApiResponse<{
+    success: boolean;
+    requestId: string;
+    results: any[];
+    stats: {
+      totalExtractions: number;
+      successfulExtractions: number;
+      failedExtractions: number;
+      processingTimeMs: number;
+    };
+  }>> {
+    const payload = {
+      projectId,
+      extractions: [
+        {
+          documentCollection: {
+            id: collectionId,
+            columns: options?.columnId 
+              ? [{ columnId: options.columnId }] 
+              : (options?.columns?.map(col => ({ columnId: col })) || []),
+            aggregationStrategy: options?.aggregationStrategy || 'concatenate',
+            forceReextract: options?.forceReextract || false
+          }
+        }
+      ],
+      globalOptions: {
+        aiModel: 'gpt-4o' as const,
+        includeConfidence: true,
+        includeMetadata: true
+      }
+    };
+
+    return apiClient.post('/extract/simplified', payload);
   }
 
   // ✅ NEW: Upload documents directly to a specific collection

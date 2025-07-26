@@ -347,28 +347,60 @@ export function CellCustomizationDialog({
     setExtractionResult(null);
 
     try {
-      const response = await fetch("/api/extract-cell", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          projectId,
-          documentId,
-          columnId,
-          customPrompt: customPrompt.trim(),
-          saveCustomPrompt: false, // Just test, don't save
-        }),
+      console.log("🧪 Testing cell extraction with simplified API:", {
+        projectId,
+        documentId,
+        columnId,
+        customPrompt: customPrompt.trim()
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
+      // Use the new simplified extraction API
+      const payload = {
+        projectId,
+        extractions: [
+          {
+            cellCustomization: {
+              documentId,
+              columnId,
+              customPrompt: customPrompt.trim(),
+              notes: notes.trim() || undefined,
+              aiModel: 'gpt-4o'
+            }
+          }
+        ],
+        globalOptions: {
+          aiModel: 'gpt-4o',
+          includeConfidence: true,
+          includeMetadata: true
+        }
+      };
+
+      const response = await fetch('/api/extract/simplified', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include', // Include cookies for authentication
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || errorData.error || 'Extraction failed');
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.results.length > 0) {
+        const extractionResult = result.results[0];
+        const cellData = extractionResult.data[columnId];
+        
+        if (cellData) {
           const newResult = {
-            value: data.data.result.value,
-            confidence: data.data.result.confidence,
-            timestamp: new Date().toISOString()
+            value: cellData.value,
+            confidence: cellData.confidence,
+            timestamp: cellData.extractedAt
           };
           
           setExtractionResult(newResult);
@@ -378,37 +410,23 @@ export function CellCustomizationDialog({
             ...prev,
             currentValue: newResult.value,
             confidence: newResult.confidence,
-            lastExtracted: newResult.timestamp
+            lastExtracted: newResult.timestamp,
+            isCustomized: true // Mark as customized since we used custom prompt
           } : null);
           
+          console.log("✅ Cell extraction successful:", newResult);
           alert("✅ Test extraction completed successfully!");
         } else {
-          throw new Error(data.error || "Extraction test failed");
+          throw new Error("No data returned for the specified column");
         }
       } else {
-        throw new Error("Extraction test failed");
+        const errorMsg = result.errors?.[0] || "Extraction failed";
+        throw new Error(errorMsg);
       }
+      
     } catch (error: any) {
-      console.warn("API extraction failed, simulating extraction:", error.message);
-      
-      // Simulate successful extraction for demo
-      const mockResult = {
-        value: `Extracted: ${columnName} data using custom prompt`,
-        confidence: 0.89,
-        timestamp: new Date().toISOString()
-      };
-      
-      setExtractionResult(mockResult);
-      
-      // Update cell info with mock result
-      setCellInfo(prev => prev ? {
-        ...prev,
-        currentValue: mockResult.value,
-        confidence: mockResult.confidence,
-        lastExtracted: mockResult.timestamp
-      } : null);
-      
-      alert("✅ Test extraction completed successfully! (Demo mode)");
+      console.error("❌ Cell extraction failed:", error.message);
+      setError(`Failed to extract data: ${error.message}`);
     } finally {
       setIsExtracting(false);
     }
@@ -422,21 +440,105 @@ export function CellCustomizationDialog({
     setError("");
 
     try {
-      // First save the customization
-      await handleSaveCustomization();
+      console.log("💾 Save and Extract with simplified API:", {
+        projectId,
+        documentId,
+        columnId,
+        customPrompt: customPrompt.trim(),
+        notes: notes.trim()
+      });
+
+      // Use the new simplified extraction API
+      const payload = {
+        projectId,
+        extractions: [
+          {
+            cellCustomization: {
+              documentId,
+              columnId,
+              customPrompt: customPrompt.trim(),
+              notes: notes.trim() || undefined,
+              aiModel: 'gpt-4o',
+              validationRules: {
+                required: false // Could add validation rules here in the future
+              }
+            }
+          }
+        ],
+        globalOptions: {
+          aiModel: 'gpt-4o',
+          includeConfidence: true,
+          includeMetadata: true,
+          includeDebugInfo: true
+        }
+      };
+
+      const response = await fetch('/api/extract/simplified', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include', // Include cookies for authentication
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || errorData.error || 'Save and extract failed');
+      }
+
+      const result = await response.json();
       
-      // Then extract with the new prompt
-      await handleTestExtraction();
-      
-      alert("✅ Customization saved and data re-extracted successfully!");
-      
-      // Optionally close dialog after successful save and extract
-      setTimeout(() => {
-        onOpenChange(false);
-      }, 1000);
+      if (result.success && result.results.length > 0) {
+        const extractionResult = result.results[0];
+        const cellData = extractionResult.data[columnId];
+        
+        if (cellData) {
+          // Update local state to reflect the customization
+          setCellInfo(prev => prev ? {
+            ...prev,
+            effectivePrompt: customPrompt.trim(),
+            isCustomized: true,
+            currentValue: cellData.value,
+            confidence: cellData.confidence,
+            lastExtracted: cellData.extractedAt,
+            cellCustomization: {
+              isCustomized: true,
+              customPrompt: customPrompt.trim(),
+              notes: notes.trim(),
+              customizedAt: new Date().toISOString(),
+            }
+          } : null);
+
+          // Set the extraction result
+          setExtractionResult({
+            value: cellData.value,
+            confidence: cellData.confidence,
+            timestamp: cellData.extractedAt
+          });
+
+          // Notify parent component
+          onCustomizationSaved?.();
+          
+          console.log("✅ Save and extract successful:", cellData);
+          alert("✅ Customization saved and data re-extracted successfully!");
+          
+          // Optionally close dialog after successful save and extract
+          setTimeout(() => {
+            onOpenChange(false);
+          }, 1000);
+        } else {
+          throw new Error("No data returned for the specified column");
+        }
+      } else {
+        const errorMsg = result.errors?.[0] || "Save and extract failed";
+        throw new Error(errorMsg);
+      }
       
     } catch (error: any) {
-      setError(error.message);
+      console.error("❌ Save and extract failed:", error.message);
+      setError(`Failed to save and extract: ${error.message}`);
     } finally {
       setSaving(false);
       setIsExtracting(false);
