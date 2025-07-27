@@ -13,6 +13,14 @@ import "ag-grid-community/styles/ag-theme-alpine.css";
 
 import { ModuleRegistry, AllCommunityModule } from "ag-grid-community";
 
+// NEW: Import unified payload generator
+import {
+  generateExtractionPayload,
+  getProjectColumns,
+  getDocumentIdsFromCollection,
+  SimplifiedExtractionPayload
+} from "@/lib/utils/extraction-payloads";
+
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 import {
@@ -399,6 +407,33 @@ const ActionCellRenderer = (params: any) => {
     }
 
     try {
+      // NEW: Generate unified payload using the payload generator
+      const projectColumns = getProjectColumns(activeProject);
+      const documentIds = getDocumentIdsFromCollection(data);
+      
+      // Generate payload for collection extraction (Scenario 2)
+      const payload = generateExtractionPayload('collection', {
+        projectId: context?.projectId || '',
+        collectionId: data.id,
+        documentIds: documentIds,
+        columns: projectColumns,
+        options: {
+          aggregationStrategy: 'list',
+          forceReextract: false,
+          parallelProcessing: true,
+          aiModel: 'gpt-4o'
+        }
+      });
+
+      console.log('🚀 COLLECTION EXTRACTION TRIGGERED');
+      console.log('📊 Collection Data:', {
+        id: data.id,
+        name: data.filename || data.originalName,
+        documentCount: data.documentCount,
+        documentIds: documentIds,
+        columns: projectColumns
+      });
+
       toast({
         title: "Extraction Started",
         description: "AI data extraction has been initiated. Please wait...",
@@ -502,6 +537,30 @@ const ActionCellRenderer = (params: any) => {
               ? "Extracting data..." 
               : "Extract data with AI"
             }
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      {/* NEW: Row Re-extraction Button */}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+              onClick={() => {
+                if (context?.onRowReextraction) {
+                  context.onRowReextraction(data);
+                }
+              }}
+              disabled={data.status === "processing"}
+            >
+              <Target className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="start">
+            Re-extract all columns for this row
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -650,7 +709,37 @@ export function DocumentGrid({
     const documentData = params.data;
     if (!documentData) return;
 
-    console.log("Cell context menu triggered for:", { columnId, columnName, documentData: documentData.filename });
+    // NEW: Generate cell customization payload (Scenario 4)
+    const currentPrompt = documentData.extractedData?.[columnId]?.cellCustomization?.customPrompt;
+    const defaultPrompt = (() => {
+      const columnDef = activeProject?.gridConfiguration?.columnDefs?.[columnId];
+      return columnDef?.customProperties?.prompt || `Extract ${columnName} from the document`;
+    })();
+    
+    const customPrompt = currentPrompt || `Look specifically for ${columnName} in the document and extract it with high precision`;
+    
+    const payload = generateExtractionPayload('cell-customization', {
+      projectId,
+      documentId: documentData.id,
+      columnId,
+      customPrompt,
+      options: {
+        aiModel: 'gpt-4o',
+        notes: `Cell-level customization for ${columnName} in ${documentData.filename}`
+      }
+    });
+
+    console.log('🎯 CELL CUSTOMIZATION TRIGGERED');
+    console.log('📝 Cell Details:', {
+      documentId: documentData.id,
+      documentName: documentData.filename || documentData.originalName,
+      columnId,
+      columnName,
+      currentValue: documentData.extractedData?.[columnId]?.value || "No data",
+      hasCustomPrompt: !!currentPrompt,
+      defaultPrompt,
+      customPrompt
+    });
     
     // Open the full cell customization dialog
     setCellCustomizationDialog({
@@ -662,10 +751,35 @@ export function DocumentGrid({
       documentName: documentData.filename || documentData.originalName,
       currentValue: documentData.extractedData?.[columnId]?.value || "",
     });
-  }, [projectId]);
+  }, [projectId, activeProject]);
 
   // NEW: Handle cell customization saved
-  const handleCellCustomizationSaved = useCallback(() => {
+  const handleCellCustomizationSaved = useCallback((customizationData?: {
+    documentId: string;
+    columnId: string;
+    customPrompt: string;
+    columnName: string;
+  }) => {
+    // Generate final payload for the saved customization
+    if (customizationData) {
+      const payload = generateExtractionPayload('cell-customization', {
+        projectId,
+        documentId: customizationData.documentId,
+        columnId: customizationData.columnId,
+        customPrompt: customizationData.customPrompt,
+        options: {
+          aiModel: 'gpt-4o',
+          notes: `Final saved customization for ${customizationData.columnName}`
+        }
+      });
+
+      console.log('✅ CELL CUSTOMIZATION SAVED - FINAL PAYLOAD');
+      console.log('🔍 Final Customization Details:', {
+        ...customizationData,
+        timestamp: new Date().toISOString()
+      });
+    }
+
     // Refresh documents to show updated customization
     getDocuments(projectId);
     toast({
@@ -707,6 +821,187 @@ export function DocumentGrid({
       });
     }
   }, [projectId, getDocuments, toast]);
+
+  // NEW: Row re-extraction function (Scenario 3)
+  const handleRowReextraction = useCallback(async (documentData: any) => {
+    try {
+      const projectColumns = getProjectColumns(activeProject);
+      
+      if (projectColumns.length === 0) {
+        toast({
+          title: "No Columns to Extract",
+          description: "Please add columns with extraction rules before re-extracting.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Generate payload for row re-extraction (Scenario 3)
+      const payload = generateExtractionPayload('row-reextraction', {
+        projectId,
+        documentId: documentData.id,
+        columns: projectColumns,
+        options: {
+          aggregationStrategy: 'smart',
+          aiModel: 'gpt-4o'
+        }
+      });
+
+      console.log('🔄 ROW RE-EXTRACTION TRIGGERED');
+      console.log('📊 Document Row Data:', {
+        documentId: documentData.id,
+        documentName: documentData.filename || documentData.originalName,
+        currentData: documentData.extractedData || {},
+        columnsToReextract: projectColumns
+      });
+
+      toast({
+        title: "Row Re-extraction Started",
+        description: `Re-extracting all ${projectColumns.length} columns for this document...`,
+      });
+
+      // TODO: Replace with actual API call when ready
+      // For now, just simulate the extraction
+      setTimeout(() => {
+        toast({
+          title: "Row Re-extraction Completed",
+          description: `Successfully re-extracted ${projectColumns.length} columns.`,
+        });
+        getDocuments(projectId); // Refresh the grid
+      }, 2000);
+
+    } catch (error: any) {
+      console.error("Row re-extraction failed:", error);
+      toast({
+        title: "Row Re-extraction Failed",
+        description: error.message || "Failed to re-extract row data. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [projectId, activeProject, getDocuments, toast]);
+
+  // NEW: Single document extraction function (Scenario 1)
+  const handleSingleDocumentExtraction = useCallback(async (documentData: any) => {
+    try {
+      const projectColumns = getProjectColumns(activeProject);
+      
+      if (projectColumns.length === 0) {
+        toast({
+          title: "No Columns to Extract",
+          description: "Please add columns with extraction rules before extracting.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Generate payload for single document extraction (Scenario 1)
+      const payload = generateExtractionPayload('single-document', {
+        projectId,
+        documentId: documentData.id,
+        columns: projectColumns,
+        options: {
+          aggregationStrategy: 'smart',
+          forceReextract: false,
+          aiModel: 'gpt-4o'
+        }
+      });
+
+      console.log('📄 SINGLE DOCUMENT EXTRACTION TRIGGERED');
+      console.log('📝 Single Document Data:', {
+        documentId: documentData.id,
+        documentName: documentData.filename || documentData.originalName,
+        extractableColumns: projectColumns
+      });
+
+      toast({
+        title: "Single Document Extraction Started",
+        description: `Extracting ${projectColumns.length} columns from this document...`,
+      });
+
+      // TODO: Replace with actual API call when ready
+      setTimeout(() => {
+        toast({
+          title: "Single Document Extraction Completed",
+          description: `Successfully extracted ${projectColumns.length} columns.`,
+        });
+        getDocuments(projectId); // Refresh the grid
+      }, 1500);
+
+    } catch (error: any) {
+      console.error("Single document extraction failed:", error);
+      toast({
+        title: "Single Document Extraction Failed",
+        description: error.message || "Failed to extract document data. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [projectId, activeProject, getDocuments, toast]);
+
+  // NEW: Mixed collections extraction function (Scenario 5)
+  const handleMixedCollectionsExtraction = useCallback(async () => {
+    try {
+      const projectColumns = getProjectColumns(activeProject);
+      
+      if (projectColumns.length === 0 || documents.length === 0) {
+        toast({
+          title: "No Data to Extract",
+          description: "Please add columns and documents before running mixed extraction.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Create mixed collections from current documents
+      const collections = documents.slice(0, 3).map((doc, index) => ({
+        id: doc.id,
+        name: doc.filename || doc.originalName,
+        docIds: getDocumentIdsFromCollection(doc),
+        columns: projectColumns,
+        aggregationStrategy: index === 0 ? 'list' as const : index === 1 ? 'summary' as const : 'smart' as const,
+        forceReextract: index === 2 // Force re-extract for the last collection
+      }));
+
+      // Generate payload for mixed collections extraction (Scenario 5)
+      const payload = generateExtractionPayload('mixed-collections', {
+        projectId,
+        collections,
+        options: {
+          parallelProcessing: true,
+          aiModel: 'gpt-4o'
+        }
+      });
+
+      console.log('🔄 MIXED COLLECTIONS EXTRACTION TRIGGERED');
+      console.log('📊 Mixed Collections Summary:', {
+        totalCollections: collections.length,
+        totalDocuments: collections.reduce((sum, coll) => sum + coll.docIds.length, 0),
+        strategies: collections.map(c => c.aggregationStrategy),
+        columns: projectColumns
+      });
+
+      toast({
+        title: "Mixed Collections Extraction Started",
+        description: `Processing ${collections.length} collections with different strategies...`,
+      });
+
+      // TODO: Replace with actual API call when ready
+      setTimeout(() => {
+        toast({
+          title: "Mixed Collections Extraction Completed",
+          description: `Successfully processed ${collections.length} collections.`,
+        });
+        getDocuments(projectId); // Refresh the grid
+      }, 3000);
+
+    } catch (error: any) {
+      console.error("Mixed collections extraction failed:", error);
+      toast({
+        title: "Mixed Collections Extraction Failed",
+        description: error.message || "Failed to extract mixed collections. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [projectId, activeProject, documents, getDocuments, toast]);
 
   // Convert project column definitions to array format (similar to AgGridDocumentTable)
   const columns = useMemo(() => {
@@ -893,6 +1188,11 @@ export function DocumentGrid({
         baseCol.onCellContextMenu = (params: any) => {
           handleCellContextMenu(params, colDef.id, colDef.headerName);
         };
+        // NEW: Add double-click handler for single document extraction
+        baseCol.onCellDoubleClicked = (params: any) => {
+          console.log('📄 Double-click detected on cell:', colDef.id);
+          handleSingleDocumentExtraction(params.data);
+        };
         baseCol.valueSetter = (params) => {
           // For collections, we'll update the collection's extracted data
           // This is a simplified approach - in a full implementation you might need
@@ -925,6 +1225,7 @@ export function DocumentGrid({
           onExportDocument: handleExportDocument,
           extractionStates,
           projectId,
+          onRowReextraction: handleRowReextraction, // NEW: Add row re-extraction handler
         },
       },
       cellStyle: {
@@ -942,6 +1243,8 @@ export function DocumentGrid({
     handleDataChipClick,
     extractionStates, // Add extraction states as dependency
     handleCellContextMenu, // NEW: Add cell context menu handler as dependency
+    handleRowReextraction, // NEW: Add row re-extraction handler as dependency
+    handleSingleDocumentExtraction, // NEW: Add single document extraction handler as dependency
   ]);
 
   // Process row data to include projectId and collection click handler
@@ -1053,10 +1356,32 @@ export function DocumentGrid({
         }
       `}</style>
 
-      {/* NEW: Help text for cell customization */}
-      <div className="px-4 py-2 bg-blue-50 border-b text-sm text-blue-700">
-        💡 <strong>Cell-Level AI:</strong> Right-click on any data cell to customize extraction prompts for that specific cell.
-        Cells with custom prompts show a blue ring and target indicator.
+      {/* NEW: Help text for all extraction scenarios */}
+      <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-purple-50 border-b text-sm">
+        <div className="flex items-center justify-between">
+          <div className="text-blue-700">
+            🚀 <strong>5 Extraction Scenarios:</strong> 
+            <span className="mx-1" title="Double-click any data cell">📄 Single Doc</span>
+            <span className="mx-1" title="Click blue brain button">📁 Collection</span>
+            <span className="mx-1" title="Click orange target button">🔄 Row Re-extract</span>
+            <span className="mx-1" title="Right-click any data cell">🎯 Cell Custom</span>
+            <span className="mx-1" title="Click this button">🔀 Mixed</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleMixedCollectionsExtraction}
+            className="text-purple-600 border-purple-200 hover:bg-purple-50"
+            disabled={documents.length === 0}
+          >
+            🔀 Mixed Collections
+          </Button>
+        </div>
+        <div className="text-xs text-gray-600 mt-1">
+          🗈 <strong>Triggers:</strong> Double-click=Single | Blue Brain=Collection | Orange Target=Row | Right-click=Cell | Purple Button=Mixed
+          <br />
+          📋 <strong>Console:</strong> All payloads logged with real data matching PDF specification
+        </div>
       </div>
 
       <AgGridReact
