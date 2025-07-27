@@ -13,6 +13,8 @@ import {
   Trash2,
   Settings,
   Filter,
+  Folder,
+  FolderOpen,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -33,15 +35,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import { useProjects, useActiveProject, useProjectActions } from "@/lib/stores";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 
 interface ProjectSidebarProps {
   onProjectSelect?: (projectId: string) => void;
+  collapsed?: boolean;
 }
 
-export function ProjectSidebar({ onProjectSelect }: ProjectSidebarProps) {
+export function ProjectSidebar({ onProjectSelect, collapsed = false }: ProjectSidebarProps) {
   const router = useRouter();
   const projects = useProjects();
   const activeProject = useActiveProject();
@@ -135,6 +144,100 @@ export function ProjectSidebar({ onProjectSelect }: ProjectSidebarProps) {
     }
   };
 
+  // Collapsed sidebar view
+  if (collapsed) {
+    return (
+      <TooltipProvider>
+        <div className="h-full bg-white border-r border-gray-200 flex flex-col items-center py-4">
+          {/* Logo/Icon */}
+          <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mb-6">
+            <span className="text-sm font-bold text-blue-600">DE</span>
+          </div>
+
+          {/* Create Project Button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="sm"
+                onClick={() => setShowCreateDialog(true)}
+                className="w-8 h-8 p-0 mb-4"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>Create new project</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Project Icons */}
+          <div className="flex flex-col space-y-2 flex-1 w-full px-2">
+            {filteredProjects.slice(0, 8).map((project) => (
+              <Tooltip key={project._id}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => handleProjectSelect(project)}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                      activeProject?._id === project._id
+                        ? "bg-blue-100 text-blue-600"
+                        : "hover:bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {activeProject?._id === project._id ? (
+                      <FolderOpen className="h-4 w-4" />
+                    ) : (
+                      <Folder className="h-4 w-4" />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <div>
+                    <p className="font-medium">{project.name}</p>
+                    {project.description && (
+                      <p className="text-sm text-gray-500 max-w-xs">
+                        {project.description}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">
+                      {project.stats?.documentCount || 0} documents
+                    </p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            ))}
+
+            {/* Show more indicator */}
+            {filteredProjects.length > 8 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-100 text-gray-500">
+                    <span className="text-xs font-medium">
+                      +{filteredProjects.length - 8}
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>{filteredProjects.length - 8} more projects</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+
+          {/* Create Project Dialog */}
+          <CreateProjectDialog
+            open={showCreateDialog}
+            onOpenChange={setShowCreateDialog}
+            onProjectCreated={(project) => {
+              setActiveProject(project);
+              router.push(`/dashboard?project=${project._id}`);
+            }}
+          />
+        </div>
+      </TooltipProvider>
+    );
+  }
+
+  // Full sidebar view (original)
   return (
     <div className="h-full bg-white border-r border-gray-200 flex flex-col">
       {/* Header */}

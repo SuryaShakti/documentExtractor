@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, User, Settings, CreditCard, Menu, X } from "lucide-react";
+import { LogOut, User, Settings, CreditCard, Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +26,26 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, logout } = useAuth();
   const storageUsage = useStorageUsage();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // State for desktop sidebar collapse
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Load sidebar state from localStorage on mount
+  useEffect(() => {
+    const savedState = localStorage.getItem('sidebarCollapsed');
+    if (savedState !== null) {
+      setSidebarCollapsed(JSON.parse(savedState));
+    }
+  }, []);
+
+  // Save sidebar state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', JSON.stringify(sidebarCollapsed));
+  }, [sidebarCollapsed]);
+
+  const toggleSidebarCollapse = () => {
+    setSidebarCollapsed((prev) => !prev);
+  };
 
   const handleLogout = async () => {
     try {
@@ -42,9 +62,31 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className="h-screen flex bg-gray-50">
       {/* Desktop Sidebar */}
-      <div className="hidden lg:flex lg:flex-shrink-0">
-        <div className="w-80">
-          <ProjectSidebar />
+      <div className="hidden lg:flex lg:flex-shrink-0 relative">
+        <div 
+          className={`transition-all duration-300 ease-in-out bg-white border-r border-gray-200 ${
+            sidebarCollapsed ? 'w-16' : 'w-80'
+          }`}
+        >
+          {/* Sidebar Toggle Button */}
+          <div className="absolute -right-3 top-6 z-10">
+            <button
+              onClick={toggleSidebarCollapse}
+              className="h-6 w-6 rounded-full bg-white border border-gray-300 shadow-sm hover:bg-gray-50 transition-colors flex items-center justify-center"
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {sidebarCollapsed ? (
+                <ChevronRight className="h-3 w-3 text-gray-600" />
+              ) : (
+                <ChevronLeft className="h-3 w-3 text-gray-600" />
+              )}
+            </button>
+          </div>
+
+          {/* Sidebar Content */}
+          <div className="h-full overflow-hidden">
+            <ProjectSidebar collapsed={sidebarCollapsed} />
+          </div>
         </div>
       </div>
 

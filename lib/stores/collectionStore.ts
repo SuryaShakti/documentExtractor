@@ -173,6 +173,10 @@ const collectionService = {
     columns?: string[],
     forceReextract = false
   ) {
+    // DEPRECATED: Use extractDataWithProject instead for new simplified API
+    console.warn('⚠️  Using deprecated extractData method. Migrate to extractDataWithProject.');
+    
+    // Fallback to old API for backward compatibility
     const response = await fetch(
       `/api/document-collections/${collectionId}/extract`,
       {
@@ -181,6 +185,46 @@ const collectionService = {
         body: JSON.stringify({ columnId, columns, forceReextract }),
       }
     );
+    return response.json();
+  },
+
+  // NEW: Updated method with projectId (recommended)
+  async extractDataWithProject(
+    projectId: string,
+    collectionId: string,
+    options?: {
+      columnId?: string;
+      columns?: string[];
+      forceReextract?: boolean;
+      aggregationStrategy?: 'concatenate' | 'summary' | 'list' | 'smart';
+    }
+  ) {
+    const payload = {
+      projectId,
+      extractions: [
+        {
+          documentCollection: {
+            id: collectionId,
+            columns: options?.columnId 
+              ? [{ columnId: options.columnId }] 
+              : (options?.columns?.map(col => ({ columnId: col })) || []),
+            aggregationStrategy: options?.aggregationStrategy || 'concatenate',
+            forceReextract: options?.forceReextract || false
+          }
+        }
+      ],
+      globalOptions: {
+        aiModel: 'gpt-4o',
+        includeConfidence: true,
+        includeMetadata: true
+      }
+    };
+
+    const response = await fetch('/api/extract/simplified', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
     return response.json();
   },
 };
@@ -232,6 +276,16 @@ interface CollectionState {
     columnId?: string,
     columns?: string[],
     forceReextract?: boolean
+  ) => Promise<void>;
+  extractDataWithProject: (
+    projectId: string,
+    collectionId: string,
+    options?: {
+      columnId?: string;
+      columns?: string[];
+      forceReextract?: boolean;
+      aggregationStrategy?: 'concatenate' | 'summary' | 'list' | 'smart';
+    }
   ) => Promise<void>;
 
   clearError: () => void;
@@ -493,6 +547,8 @@ export const useCollectionStore = create<CollectionState>()(
             return { extractionStates: newExtractionStates };
           });
           
+          // Note: This still uses the old method for backward compatibility
+          // Components should migrate to extractDataWithProject
           const response = await collectionService.extractData(
             collectionId,
             columnId,
@@ -501,6 +557,17 @@ export const useCollectionStore = create<CollectionState>()(
           );
           
           if (response.success) {
+            // Handle new simplified API response format
+            let extractedData = {};
+            
+            if (response.results && response.results.length > 0) {
+              // New API format
+              extractedData = response.results[0].data || {};
+            } else if (response.data?.extractedData) {
+              // Old API format (fallback)
+              extractedData = response.data.extractedData;
+            }
+            
             // Update the current collection with extracted data immediately
             const currentState = get();
             if (currentState.currentCollection?._id === collectionId) {
@@ -509,14 +576,14 @@ export const useCollectionStore = create<CollectionState>()(
                   ...state.currentCollection!,
                   extractedData: new Map([
                     ...state.currentCollection!.extractedData,
-                    ...Object.entries(response.data.extractedData || {})
+                    ...Object.entries(extractedData)
                   ])
                 }
               }));
             }
             
             // Update collections list if data is available
-            if (response.data?.extractedData) {
+            if (Object.keys(extractedData).length > 0) {
               set((state) => ({
                 collections: state.collections.map(collection => {
                   if (collection._id === collectionId) {
@@ -524,7 +591,7 @@ export const useCollectionStore = create<CollectionState>()(
                       ...collection,
                       extractedData: new Map([
                         ...collection.extractedData,
-                        ...Object.entries(response.data.extractedData || {})
+                        ...Object.entries(extractedData)
                       ])
                     };
                   }
@@ -532,6 +599,90 @@ export const useCollectionStore = create<CollectionState>()(
                 })
               }));
             }
+            
+            // Clear extraction state
+            set((state) => {
+              const newExtractionStates = new Map(state.extractionStates);
+              newExtractionStates.delete(collectionId);
+              return { extractionStates: newExtractionStates };
+            });
+            
+            return response;
+          } else {
+            throw new Error(response.error || "Failed to extract data");
+          }
+        } catch (error: any) {
+          // Clear extraction state on error
+          set((state) => {
+            const newExtractionStates = new Map(state.extractionStates);
+            newExtractionStates.delete(collectionId);
+            return { 
+              extractionStates: newExtractionStates,
+              error: error.message || "Failed to extract data"
+            };
+          });
+          throw error;
+        }
+      },
+
+      extractDataWithProject: async (
+        projectId,
+        collectionId,
+        options = {}
+      ) => {
+        try {
+          set({ error: null });
+          
+          // Set extraction state
+          const extractingColumns = options.columnId ? [options.columnId] : (options.columns || []);
+          set((state) => {
+            const newExtractionStates = new Map(state.extractionStates);
+            newExtractionStates.set(collectionId, {
+              isExtracting: true,
+              extractingColumns,
+              startedAt: new Date()
+            });
+            return { extractionStates: newExtractionStates };
+          });
+          
+          const response = await collectionService.extractDataWithProject(
+            projectId,
+            collectionId,
+            options
+          );
+          
+          if (response.success && response.results && response.results.length > 0) {
+            const extractedData = response.results[0].data || {};
+            
+            // Update the current collection with extracted data immediately
+            const currentState = get();
+            if (currentState.currentCollection?._id === collectionId) {
+              set((state) => ({
+                currentCollection: {
+                  ...state.currentCollection!,
+                  extractedData: new Map([
+                    ...state.currentCollection!.extractedData,
+                    ...Object.entries(extractedData)
+                  ])
+                }
+              }));
+            }
+            
+            // Update collections list
+            set((state) => ({
+              collections: state.collections.map(collection => {
+                if (collection._id === collectionId) {
+                  return {
+                    ...collection,
+                    extractedData: new Map([
+                      ...collection.extractedData,
+                      ...Object.entries(extractedData)
+                    ])
+                  };
+                }
+                return collection;
+              })
+            }));
             
             // Clear extraction state
             set((state) => {
@@ -593,6 +744,7 @@ export const useCollectionActions = () =>
     reorderDocuments: state.reorderDocuments,
     toggleDocumentVisibility: state.toggleDocumentVisibility,
     extractData: state.extractData,
+    extractDataWithProject: state.extractDataWithProject,
     clearError: state.clearError,
     setCurrentCollection: state.setCurrentCollection,
   }));

@@ -34,18 +34,40 @@ interface ExtractionResult {
   };
 }
 
-// IMAGE PROCESSING - Using OpenAI Vision API (your existing working method)
+// IMAGE PROCESSING - Using OpenAI Vision API (enhanced for cell-level prompts)
 async function extractFromImage(
   documentUrl: string,
-  columns: ExtractionColumn[]
+  columns: ExtractionColumn[],
+  document?: any // NEW: Optional document for cell-level prompts
 ): Promise<ExtractionResult[]> {
   console.log("🖼️ Processing IMAGE with Vision API...");
   
   try {
+    // NEW: Use effective prompts (custom or default) for each column
+    const enhancedColumns = columns.map(col => {
+      let effectivePrompt = col.prompt;
+      
+      // Check if document has custom prompt for this cell
+      if (document) {
+        effectivePrompt = document.getEffectivePrompt(col.id, col.prompt);
+        
+        // Log if using custom prompt
+        if (document.isCellCustomized(col.id)) {
+          console.log(`🖼️ Using custom prompt for column ${col.id}: ${effectivePrompt}`);
+        }
+      }
+      
+      return {
+        ...col,
+        prompt: effectivePrompt,
+        isCustom: document ? document.isCellCustomized(col.id) : false
+      };
+    });
+    
     const extractionPrompt = `Analyze this image document and extract the following information. Return ONLY valid JSON with no additional text.
 
 EXTRACTION TASKS:
-${columns.map((col, index) => `${index + 1}. ${col.name}: ${col.prompt} (Type: ${col.type})`).join('\n')}
+${enhancedColumns.map((col, index) => `${index + 1}. ${col.name}: ${col.prompt} (Type: ${col.type})${col.isCustom ? ' [CUSTOM PROMPT]' : ''}`).join('\n')}
 
 INSTRUCTIONS:
 - Examine the image carefully for each piece of information
@@ -60,7 +82,7 @@ INSTRUCTIONS:
 REQUIRED JSON FORMAT:
 {
   "extractions": [
-    ${columns.map(col => `{"columnId": "${col.id}", "value": "", "confidence": 0}`).join(',\n    ')}
+    ${enhancedColumns.map(col => `{"columnId": "${col.id}", "value": "", "confidence": 0}`).join(',\n    ')}
   ]
 }`;
 
@@ -134,10 +156,11 @@ REQUIRED JSON FORMAT:
   }
 }
 
-// PDF PROCESSING - Clean text extraction + OpenAI processing
+// PDF PROCESSING - Clean text extraction + OpenAI processing (enhanced for cell-level prompts)
 async function extractFromPDF(
   documentUrl: string,
-  columns: ExtractionColumn[]
+  columns: ExtractionColumn[],
+  document?: any // NEW: Optional document for cell-level prompts
 ): Promise<ExtractionResult[]> {
   console.log("📄 Processing PDF with clean text extraction...");
   
@@ -148,8 +171,8 @@ async function extractFromPDF(
     // Step 2: Extract text using pdf-parse only
     const extractedText = await extractTextWithPDFParse(pdfBuffer);
     
-    // Step 3: Process extracted text with OpenAI
-    return await extractDataFromText(extractedText, columns);
+    // Step 3: Process extracted text with OpenAI (pass document for cell-level prompts)
+    return await extractDataFromText(extractedText, columns, document);
     
   } catch (error: any) {
     console.error("❌ PDF extraction failed:", error.message);
@@ -237,21 +260,43 @@ async function extractTextWithPDFParse(pdfBuffer: Buffer): Promise<string> {
   }
 }
 
-// Helper: Extract data from text using OpenAI
+// Helper: Extract data from text using OpenAI (enhanced for cell-level prompts)
 async function extractDataFromText(
   text: string,
-  columns: ExtractionColumn[]
+  columns: ExtractionColumn[],
+  document?: any // NEW: Optional document for cell-level prompts
 ): Promise<ExtractionResult[]> {
   console.log("🤖 Processing extracted text with OpenAI...");
   
   try {
+    // NEW: Use effective prompts (custom or default) for each column
+    const enhancedColumns = columns.map(col => {
+      let effectivePrompt = col.prompt;
+      
+      // Check if document has custom prompt for this cell
+      if (document) {
+        effectivePrompt = document.getEffectivePrompt(col.id, col.prompt);
+        
+        // Log if using custom prompt
+        if (document.isCellCustomized(col.id)) {
+          console.log(`📝 Using custom prompt for column ${col.id}: ${effectivePrompt}`);
+        }
+      }
+      
+      return {
+        ...col,
+        prompt: effectivePrompt,
+        isCustom: document ? document.isCellCustomized(col.id) : false
+      };
+    });
+    
     const extractionPrompt = `Analyze this document text and extract the following information. Return ONLY valid JSON.
 
 DOCUMENT TEXT:
 ${text.substring(0, 15000)}${text.length > 15000 ? '\n...(truncated)' : ''}
 
 EXTRACTION TASKS:
-${columns.map((col, index) => `${index + 1}. ${col.name}: ${col.prompt} (Type: ${col.type})`).join('\n')}
+${enhancedColumns.map((col, index) => `${index + 1}. ${col.name}: ${col.prompt} (Type: ${col.type})${col.isCustom ? ' [CUSTOM PROMPT]' : ''}`).join('\n')}
 
 INSTRUCTIONS:
 - Extract exact information requested for each field
@@ -263,7 +308,7 @@ INSTRUCTIONS:
 REQUIRED JSON FORMAT:
 {
   "extractions": [
-    ${columns.map(col => `{"columnId": "${col.id}", "value": "", "confidence": 0}`).join(',\n    ')}
+    ${enhancedColumns.map(col => `{"columnId": "${col.id}", "value": "", "confidence": 0}`).join(',\n    ')}
   ]
 }`;
 
@@ -478,52 +523,74 @@ export async function POST(request: NextRequest) {
       let extractionResults: ExtractionResult[];
       let extractionMethod = '';
 
-      // Route to appropriate extraction method
+      // Route to appropriate extraction method (NEW: Pass document for cell-level prompts)
       switch (fileType) {
         case 'image':
           console.log("🖼️ Routing to IMAGE extraction (Vision API)");
-          extractionResults = await extractFromImage(documentUrl, extractionColumns);
+          extractionResults = await extractFromImage(documentUrl, extractionColumns, document);
           extractionMethod = 'image-vision-api';
           break;
           
         case 'pdf':
           console.log("📄 Routing to PDF extraction (Clean Text + OpenAI)");
-          extractionResults = await extractFromPDF(documentUrl, extractionColumns);
+          extractionResults = await extractFromPDF(documentUrl, extractionColumns, document);
           extractionMethod = 'pdf-clean-text-extraction';
           break;
           
         default:
           console.log("❓ Unknown file type, trying image extraction as fallback");
-          extractionResults = await extractFromImage(documentUrl, extractionColumns);
+          extractionResults = await extractFromImage(documentUrl, extractionColumns, document);
           extractionMethod = 'unknown-fallback-image';
           break;
       }
       
-      // Save results to database
+      // Save results to database (NEW: Enhanced with cell-level prompt tracking)
       let successCount = 0;
+      let customPromptCount = 0;
       for (const result of extractionResults) {
         if (result.value && result.confidence > 0) {
+          const columnDef = extractionColumns.find(col => col.id === result.columnId);
+          const isCustomPrompt = document.isCellCustomized(result.columnId);
+          
           await document.setExtractedData(result.columnId, {
             value: result.value,
-            type: extractionColumns.find(col => col.id === result.columnId)?.type || "text",
+            type: columnDef?.type || "text",
             confidence: result.confidence,
             extractedBy: result.extractedBy,
             extractedAt: new Date(),
           });
+          
+          // Add extraction history entry
+          const effectivePrompt = document.getEffectivePrompt(
+            result.columnId, 
+            columnDef?.prompt || "Extract relevant information"
+          );
+          
+          await document.addExtractionHistory(
+            result.columnId,
+            effectivePrompt,
+            result.value,
+            result.confidence,
+            result.extractedBy.model
+          );
+          
           successCount++;
+          if (isCustomPrompt) customPromptCount++;
         }
       }
 
       // Update processing status
       await document.updateProcessingStatus("completed", 100);
 
-      // Add audit log
+      // Add audit log (NEW: Include cell-level customization info)
       await document.addAuditLog("processed", user._id, {
         extractionMethod,
         fileType,
         columnsProcessed: extractionColumns.length,
         successfulExtractions: successCount,
+        customPromptsUsed: customPromptCount,
         processingTimeMs: Date.now() - startTime,
+        enhancementType: "cell-level-aware-extraction"
       });
 
       const processingTime = Date.now() - startTime;

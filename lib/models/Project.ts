@@ -347,6 +347,49 @@ projectSchema.index({ status: 1 });
 projectSchema.index({ createdAt: -1 });
 projectSchema.index({ 'stats.lastActivity': -1 });
 
+// Transform columnDefs to object before saving to database
+projectSchema.pre('save', function(this: IProject) {
+  if (this.gridConfiguration && this.gridConfiguration.columnDefs instanceof Map) {
+    // Convert Map to plain object for MongoDB storage
+    const columnDefsObj = Object.fromEntries(this.gridConfiguration.columnDefs);
+    (this.gridConfiguration.columnDefs as any) = columnDefsObj;
+  }
+});
+
+// Transform columnDefs back to Map after saving
+projectSchema.post('save', function(this: IProject) {
+  if (this.gridConfiguration && this.gridConfiguration.columnDefs && !(this.gridConfiguration.columnDefs instanceof Map)) {
+    // Convert object back to Map for in-memory operations
+    const columnDefsObj = this.gridConfiguration.columnDefs;
+    this.gridConfiguration.columnDefs = new Map(Object.entries(columnDefsObj));
+  }
+});
+
+// Transform columnDefs from object to Map after loading from database
+projectSchema.post(['find', 'findOne', 'findOneAndUpdate'], function(doc) {
+  if (doc && doc.gridConfiguration && doc.gridConfiguration.columnDefs) {
+    // If columnDefs is not a Map, convert it to one
+    if (!(doc.gridConfiguration.columnDefs instanceof Map)) {
+      const columnDefsObj = doc.gridConfiguration.columnDefs;
+      doc.gridConfiguration.columnDefs = new Map(Object.entries(columnDefsObj));
+    }
+  }
+});
+
+// Handle arrays of documents
+projectSchema.post(['find'], function(docs) {
+  if (Array.isArray(docs)) {
+    docs.forEach(doc => {
+      if (doc && doc.gridConfiguration && doc.gridConfiguration.columnDefs) {
+        if (!(doc.gridConfiguration.columnDefs instanceof Map)) {
+          const columnDefsObj = doc.gridConfiguration.columnDefs;
+          doc.gridConfiguration.columnDefs = new Map(Object.entries(columnDefsObj));
+        }
+      }
+    });
+  }
+});
+
 // Virtual for checking if user has access
 projectSchema.virtual('hasAccess').get(function(this: IProject) {
   return function(userId: mongoose.Types.ObjectId) {
@@ -509,6 +552,18 @@ projectSchema.methods.removeColumn = function(this: IProject, columnId: string) 
   this.gridConfiguration.meta.lastUpdated = new Date();
   
   return true;
+};
+
+// Transform output for JSON serialization
+projectSchema.methods.toJSON = function(this: IProject) {
+  const project = this.toObject();
+  
+  // Convert columnDefs Map to object for JSON serialization
+  if (project.gridConfiguration && project.gridConfiguration.columnDefs instanceof Map) {
+    project.gridConfiguration.columnDefs = Object.fromEntries(project.gridConfiguration.columnDefs);
+  }
+  
+  return project;
 };
 
 export default mongoose.models.Project || mongoose.model<IProject>('Project', projectSchema);
